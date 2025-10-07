@@ -9,14 +9,21 @@ export default function RootLayout() {
   const router = useRouter();
 
   return (
-    <Stack>
+    <Stack >
       {/* Stack principal */}
       <Stack.Screen name="(tabs)" options={{ header: () => <Header /> }} />
 
       <Stack.Screen
         name="perfil/index"
-        options={{ headerTitle: "Perfil", headerTransparent: true }}
+        options={{
+          headerTitle: "",
+          headerTransparent: true,
+          headerBackTitle: "Voltar",
+          headerTintColor: "#000",
+          headerTitleStyle: { fontSize: 24, fontWeight: "bold" },
+        }}
       />
+
       <Stack.Screen
         name="not-found"
         options={{ title: "Página não encontrada" }}

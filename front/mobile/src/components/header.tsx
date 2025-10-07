@@ -1,6 +1,5 @@
 import { SafeAreaView } from "react-native-safe-area-context";
-import { View, Text, TouchableOpacity } from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import { View, Text, TouchableOpacity, Image } from "react-native";
 import { useRouter, usePathname } from "expo-router";
 
 // Mapeamento de caminhos para títulos
@@ -10,22 +9,23 @@ const routeTitles: Record<string, string> = {
   "/pedidos": "Pedidos",
   "/infopoint": "Info",
   "/chat": "Chat",
-  "/perfil": "Perfil",
 };
 
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
-
-  // Obtém o título da rota atual
-  const title = routeTitles[pathname] || "Meu App";
+  const title = routeTitles[pathname] || null;
+  const profileImage = "https://i.pravatar.cc/150?img=12";
 
   return (
-    <SafeAreaView edges={["top"]} className=" border-b border-gray-200 bg-white">
-      <View className="h-16 flex-row items-center justify-between px-4 ">
-        {/* Botão de perfil no canto esquerdo */}
+    <SafeAreaView edges={["top"]} className="border-b border-gray-200 bg-white">
+      <View className="h-16 flex-row items-center justify-between px-4">
+        {/* Foto de perfil */}
         <TouchableOpacity onPress={() => router.push("/perfil")}>
-          <Ionicons name="person-circle-outline" size={40} color="#4da3ff" />
+          <Image
+            source={{ uri: profileImage }}
+            style={{ width: 40, height: 40, borderRadius: 20 }}
+          />
         </TouchableOpacity>
 
         {/* Título dinâmico */}

@@ -1,0 +1,28 @@
+"use client";
+
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/myComponents/AppSidebar";
+import { Header } from "@/components/myComponents/Header";
+import { CondominiumNavbar } from "@/components/myComponents/condominiumNavbar";
+import { ReactNode } from "react";
+import { usePathname } from "next/navigation";
+
+export default function Layout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+
+  // Condições para não mostrar a navbar
+  const showCondominiumNavbar =
+    pathname !== "/dashboard" && pathname !== "/dashboard/profile" && pathname !== "/dashboard/admins";
+
+  return (
+    <SidebarProvider>
+      <AppSidebar />
+      <main className="w-full overflow-x-hidden">
+        <SidebarTrigger className="sm:hidden md:hidden" />
+        <Header />
+        {showCondominiumNavbar && <CondominiumNavbar />}
+        {children}
+      </main>
+    </SidebarProvider>
+  );
+}
