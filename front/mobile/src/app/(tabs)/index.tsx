@@ -69,7 +69,7 @@ export default function HomeScreen() {
           className="flex-1 bg-white rounded-2xl p-6 shadow-sm border border-gray-200"
         >
           <Text className="text-gray-500 text-base font-bold mb-2">
-            Valor mensal a Pagar
+            Divida mensal
           </Text>
           <Text className="text-3xl font-bold text-blue-500">
             {ValorAPagar.toFixed(2).replace(".", ",")} €
