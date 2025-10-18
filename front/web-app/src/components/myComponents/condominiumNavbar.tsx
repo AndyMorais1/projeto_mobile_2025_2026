@@ -1,46 +1,56 @@
 "use client";
 
-import { useRef, useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
-
-const generateCondominiums = (count: number) =>
-  Array.from({ length: count }, (_, i) => ({
-    id: (i + 1).toString(),
-    name: `Condomínio ${i + 1}`,
-  }));
-
-const allCondominiums = generateCondominiums(1000);
+import { supabase } from "@/api/Client";
+import { useCondominium } from "@/context/CondominiumProvider";
 
 export function CondominiumNavbar() {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { selected, setSelected } = useCondominium();
+  const [condominiums, setCondominiums] = useState<{ id: string; nome: string }[]>([]);
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Sempre mostra os primeiros 20 para a barra horizontal
-  const visibleCondominiums = allCondominiums.slice(0, 20);
+  // 🔹 Carrega condomínios
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from("condominio")
+        .select("id, nome")
+        .order("created_at");
 
-  // Dropdown de pesquisa (filtra todos os condomínios)
+      if (!error && data) {
+        setCondominiums(data);
+
+        // ✅ Se ainda não houver condomínio selecionado, escolhe o primeiro automaticamente
+        if (!selected && data.length > 0) {
+          setSelected(data[0]);
+        }
+      }
+    })();
+  }, [selected, setSelected]);
+
+  const visible = condominiums.slice(0, 20);
+
   const dropdownResults = useMemo(() => {
     if (!search) return [];
-    return allCondominiums.filter((c) =>
-      c.name.toLowerCase().includes(search.toLowerCase())
-    ).slice(0, 10); // limitar a 10 resultados
-  }, [search]);
+    return condominiums
+      .filter((c) => c.nome.toLowerCase().includes(search.toLowerCase()))
+      .slice(0, 10);
+  }, [search, condominiums]);
 
-  const scroll = (direction: "left" | "right") => {
-    if (scrollRef.current) {
-      const scrollAmount = 300;
+  const scroll = (dir: "left" | "right") => {
+    if (scrollRef.current)
       scrollRef.current.scrollBy({
-        left: direction === "left" ? -scrollAmount : scrollAmount,
+        left: dir === "left" ? -300 : 300,
         behavior: "smooth",
       });
-    }
   };
 
   return (
     <div className="w-full border-b border-gray-200 bg-white p-3 flex flex-col gap-2 mb-12">
-      {/* Busca + Dropdown */}
+      {/* Busca */}
       <div className="relative max-w-md px-2">
         <div className="flex items-center gap-2">
           <Search className="w-5 h-5 text-gray-400" />
@@ -53,7 +63,6 @@ export function CondominiumNavbar() {
           />
         </div>
 
-        {/* Dropdown de resultados */}
         {search && (
           <div className="absolute top-full mt-1 w-full bg-white border rounded shadow-lg max-h-60 overflow-y-auto z-20">
             {dropdownResults.length > 0 ? (
@@ -62,11 +71,11 @@ export function CondominiumNavbar() {
                   key={condo.id}
                   className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm"
                   onClick={() => {
-                    setSelectedId(condo.id);
+                    setSelected(condo);
                     setSearch("");
                   }}
                 >
-                  {condo.name}
+                  {condo.nome}
                 </button>
               ))
             ) : (
@@ -78,7 +87,7 @@ export function CondominiumNavbar() {
         )}
       </div>
 
-      {/* Scroll horizontal isolado (sempre visível) */}
+      {/* Scroll horizontal */}
       <div className="relative w-full overflow-hidden px-10">
         <Button
           variant="ghost"
@@ -93,14 +102,14 @@ export function CondominiumNavbar() {
           ref={scrollRef}
           className="flex gap-4 overflow-x-auto py-5 scrollbar-hide scroll-smooth w-full"
         >
-          {visibleCondominiums.map((condo) => (
+          {visible.map((condo) => (
             <Button
               key={condo.id}
-              variant={selectedId === condo.id ? "default" : "outline"}
+              variant={selected?.id === condo.id ? "default" : "outline"}
               className="whitespace-nowrap flex-shrink-0 px-6 py-2"
-              onClick={() => setSelectedId(condo.id)}
+              onClick={() => setSelected(condo)}
             >
-              {condo.name}
+              {condo.nome}
             </Button>
           ))}
         </div>

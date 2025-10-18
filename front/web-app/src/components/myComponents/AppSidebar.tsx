@@ -1,5 +1,16 @@
 "use client";
-import { LayoutDashboard, User, Home, Check, Info, NotebookPen, ReceiptText, UserStar } from "lucide-react";
+import {
+  LayoutDashboard,
+  User,
+  Home,
+  Check,
+  Info,
+  NotebookPen,
+  ReceiptText,
+  UserStar,
+  Bed,
+  Building2
+} from "lucide-react";
 import { Separator } from "../ui/separator";
 import { UserSidebar } from "./UserSidebar";
 import {
@@ -13,9 +24,9 @@ import {
   SidebarMenuItem,
   SidebarFooter,
   SidebarHeader,
-  SidebarTrigger
 } from "@/components/ui/sidebar";
 import Link from "next/link";
+import { title } from "process";
 
 // Menu items
 const items = [
@@ -33,6 +44,11 @@ const items = [
     title: "Casas",
     url: "/dashboard/casas",
     icon: Home,
+  },
+  {
+    title: "Condomínios",
+    url: "/dashboard/condominios",
+    icon: Building2,
   },
   {
     title: "Informações",
@@ -69,7 +85,6 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel className="mb-2">Aplicação</SidebarGroupLabel>
           <SidebarGroupContent>
-
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
