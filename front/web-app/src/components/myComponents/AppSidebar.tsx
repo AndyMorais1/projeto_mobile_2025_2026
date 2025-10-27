@@ -9,7 +9,8 @@ import {
   ReceiptText,
   UserStar,
   Bed,
-  Building2
+  Building2,
+ Clock
 } from "lucide-react";
 import { Separator } from "../ui/separator";
 import { UserSidebar } from "./UserSidebar";
@@ -64,6 +65,11 @@ const items = [
     title: "Faturas",
     url: "/dashboard/faturas",
     icon: ReceiptText,
+  },
+  {
+    title: "Atividades",
+    url: "/dashboard/atividades",
+    icon: Clock,
   },
   {
     title: "Admins",

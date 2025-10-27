@@ -5,38 +5,42 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Bell, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { User, Home, Building2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
-export type NotificacaoTipo = "info" | "alerta" | "sucesso";
+/** Tipos de atividade suportados */
+export type ActivityType = "morador" | "propriedade" | "condominio";
 
-export interface Notificacao {
+/** Item unificado de atividade recente */
+export interface ActivityItem {
   id: string;
-  titulo: string;
-  mensagem?: string | null;
-  tipo: NotificacaoTipo;
+  tipo: ActivityType;
+  titulo: string; // ex.: nome do morador / label da propriedade / nome do condomínio
+  detalhe?: string | null; // ex.: "T2, 3º andar" ou endereço curto
   created_at: string | Date;
-  lida?: boolean | null;
 }
 
-function tone(tipo: NotificacaoTipo) {
+/** Helpers de UI */
+function tone(tipo: ActivityType) {
   switch (tipo) {
-    case "alerta":
-      return "border-yellow-200 bg-yellow-50 text-yellow-800";
-    case "sucesso":
-      return "border-green-200 bg-green-50 text-green-700";
+    case "morador":
+      return "border-sky-200 bg-sky-50 text-sky-700";
+    case "propriedade":
+      return "border-purple-200 bg-purple-50 text-purple-700";
+    case "condominio":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
     default:
-      return "border-blue-200 bg-blue-50 text-blue-700";
+      return "border-gray-200 bg-gray-50 text-gray-700";
   }
 }
 
-function Icone({ tipo }: { tipo: NotificacaoTipo }) {
-  if (tipo === "alerta") return <AlertTriangle className="size-4" />;
-  if (tipo === "sucesso") return <CheckCircle2 className="size-4" />;
-  return <Info className="size-4" />;
+function Icone({ tipo }: { tipo: ActivityType }) {
+  if (tipo === "morador") return <User className="size-4" />;
+  if (tipo === "propriedade") return <Home className="size-4" />;
+  return <Building2 className="size-4" />;
 }
 
-// Datas estáveis entre SSR/cliente
 const LOCALE = "pt-PT";
 const TIMEZONE = "Europe/Lisbon";
 function fmtDateTime(input: string | Date) {
@@ -49,17 +53,20 @@ function fmtDateTime(input: string | Date) {
   }).format(d);
 }
 
-export function RecentNotifications({
-  notificacoes: notificacoesProp,
-  fetchNotificacoes,
-  limit = 6,
+export function RecentActivity({
+  atividades: atividadesProp,
+  fetchAtividades,
+  limit = 8,
+  onVerTodas,
 }: {
-  notificacoes?: Notificacao[];
-  fetchNotificacoes?: () => Promise<Notificacao[]>;
+  atividades?: ActivityItem[];
+  /** Se fornecida, o componente busca sozinho (client-side) */
+  fetchAtividades?: () => Promise<ActivityItem[]>;
   limit?: number;
+  onVerTodas?: () => void;
 }) {
-  const [notificacoes, setNotificacoes] = React.useState<Notificacao[] | null>(
-    notificacoesProp ?? null
+  const [atividades, setAtividades] = React.useState<ActivityItem[] | null>(
+    atividadesProp ?? null
   );
   const [loading, setLoading] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -67,15 +74,15 @@ export function RecentNotifications({
   React.useEffect(() => {
     let cancel = false;
     async function run() {
-      if (notificacoesProp) return; // já recebidas por prop
-      if (!fetchNotificacoes) return;
+      if (atividadesProp) return; // já recebidas por prop
+      if (!fetchAtividades) return;
       try {
         setLoading(true);
         setErro(null);
-        const data = await fetchNotificacoes();
-        if (!cancel) setNotificacoes(data);
+        const data = await fetchAtividades();
+        if (!cancel) setAtividades(data);
       } catch (e: any) {
-        if (!cancel) setErro(e?.message || "Falha ao carregar notificações");
+        if (!cancel) setErro(e?.message || "Falha ao carregar atividade");
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -84,10 +91,10 @@ export function RecentNotifications({
     return () => {
       cancel = true;
     };
-  }, [fetchNotificacoes, notificacoesProp]);
+  }, [fetchAtividades, atividadesProp]);
 
   const items =
-    (notificacoes ?? [])
+    (atividades ?? [])
       .slice()
       .sort(
         (a, b) =>
@@ -100,8 +107,8 @@ export function RecentNotifications({
     <Card className="h-full">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2">
-          <Bell className="size-5" />
-          Notificações
+          <Clock className="size-5" />
+          Atividade recente
         </CardTitle>
         {items.length > 0 ? (
           <Badge variant="outline" className="rounded-xl">
@@ -113,7 +120,7 @@ export function RecentNotifications({
       <CardContent>
         {loading ? (
           <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
+            {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="animate-pulse">
                 <div className="h-4 w-2/3 rounded bg-muted mb-2" />
                 <div className="h-3 w-1/2 rounded bg-muted" />
@@ -124,29 +131,32 @@ export function RecentNotifications({
           <div className="text-sm text-destructive">{erro}</div>
         ) : items.length === 0 ? (
           <div className="text-sm text-muted-foreground">
-            Sem notificações recentes.
+            Sem itens recentes.
           </div>
         ) : (
           <ul className="divide-y">
-            {items.map((n) => (
-              <li key={n.id} className="py-3 first:pt-0 last:pb-0">
+            {items.map((a) => (
+              <li
+                key={`${a.tipo}:${a.id}`}
+                className="py-3 first:pt-0 last:pb-0"
+              >
                 <div className="flex items-start gap-3">
                   <Badge
                     variant="outline"
-                    className={cn("rounded-xl shrink-0", tone(n.tipo))}
+                    className={cn("rounded-xl shrink-0", tone(a.tipo))}
                   >
-                    <Icone tipo={n.tipo} />
+                    <Icone tipo={a.tipo} />
                   </Badge>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium truncate">{n.titulo}</p>
+                      <p className="text-sm font-medium truncate">{a.titulo}</p>
                       <span className="text-xs text-muted-foreground shrink-0">
-                        {fmtDateTime(n.created_at)}
+                        {fmtDateTime(a.created_at)}
                       </span>
                     </div>
-                    {n.mensagem ? (
+                    {a.detalhe ? (
                       <p className="text-sm text-muted-foreground line-clamp-2">
-                        {n.mensagem}
+                        {a.detalhe}
                       </p>
                     ) : null}
                   </div>
@@ -157,10 +167,9 @@ export function RecentNotifications({
         )}
 
         <Separator className="my-4" />
-
         <div className="flex justify-end">
-          <Button variant="ghost" size="sm">
-            Ver todas
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/dashboard/atividades">Ver todas</Link>
           </Button>
         </div>
       </CardContent>

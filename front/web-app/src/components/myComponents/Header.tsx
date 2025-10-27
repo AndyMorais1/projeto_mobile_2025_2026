@@ -11,7 +11,8 @@ const mapRouteToTitle: { [key: string]: string } = {
   "/dashboard/pedidos": "Pedidos",
   "/dashboard/casas": "Casas",
   "/dashboard/admins": "Admins",
-  "/dashboard/condominios":"Condomínios"
+  "/dashboard/condominios": "Condomínios",
+  "/dashboard/atividades": "Atividades"
 };
 
 export function Header() {

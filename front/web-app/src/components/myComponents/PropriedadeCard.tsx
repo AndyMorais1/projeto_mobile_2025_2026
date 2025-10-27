@@ -7,16 +7,39 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
-  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/api/Client";
 import {
-  Home, MapPin, Car, Layers, CalendarClock, MoreVertical, Pencil, Trash2,
-  Building2, User, Mail, Phone, IdCard, ReceiptText, ExternalLink, Download,
+  Home,
+  MapPin,
+  Car,
+  Layers,
+  CalendarClock,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  Building2,
+  User,
+  Mail,
+  Phone,
+  IdCard,
+  ReceiptText,
+  ExternalLink,
+  Download,
 } from "lucide-react";
 
 // ========================= Tipos =========================
@@ -67,7 +90,10 @@ type Fatura = {
 // ========================= Helpers =========================
 const LOCALE = "pt-PT";
 const TIMEZONE = "Europe/Lisbon";
-const eur = new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" });
+const eur = new Intl.NumberFormat("pt-PT", {
+  style: "currency",
+  currency: "EUR",
+});
 
 function fmtDateTime(input?: string | Date | null) {
   if (!input) return "—";
@@ -81,22 +107,31 @@ function fmtDateTime(input?: string | Date | null) {
 }
 
 function fullAddress(p: Propriedade) {
-  const parts = [p.rua, p.numero && `nº ${p.numero}`, p.andar && `andar ${p.andar}`].filter(Boolean);
+  const parts = [
+    p.rua,
+    p.numero && `nº ${p.numero}`,
+    p.andar && `andar ${p.andar}`,
+  ].filter(Boolean);
   return parts.length ? parts.join(", ") : "—";
 }
 
 function toneEstado(estado: string) {
   const s = (estado || "").toLowerCase();
-  if (s === "ativa" || s === "ativo" || s === "disponivel") return "border-green-200 bg-green-50 text-green-700";
-  if (s === "pendente" || s === "manutencao") return "border-yellow-200 bg-yellow-50 text-yellow-800";
-  if (s === "inativa" || s === "inativo" || s === "ocupada") return "border-gray-200 bg-gray-50 text-gray-700";
+  if (s === "ativa" || s === "ativo" || s === "disponivel")
+    return "border-green-200 bg-green-50 text-green-700";
+  if (s === "pendente" || s === "manutencao")
+    return "border-yellow-200 bg-yellow-50 text-yellow-800";
+  if (s === "inativa" || s === "inativo" || s === "ocupada")
+    return "border-gray-200 bg-gray-50 text-gray-700";
   return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
 function toneTipo(tipo: string) {
   const s = (tipo || "").toLowerCase();
-  if (s.includes("garagem")) return "border-slate-200 bg-slate-50 text-slate-700";
-  if (s.includes("loja")) return "border-purple-200 bg-purple-50 text-purple-700";
+  if (s.includes("garagem"))
+    return "border-slate-200 bg-slate-50 text-slate-700";
+  if (s.includes("loja"))
+    return "border-purple-200 bg-purple-50 text-purple-700";
   return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
@@ -133,8 +168,10 @@ export function PropriedadeCard({
   onDelete?: (p: Propriedade) => void;
   onPassarFatura?: (p: Propriedade) => void;
 }) {
-  const [open, setOpen] = React.useState(false);                // modal da propriedade
-  const [openMorador, setOpenMorador] = React.useState(false);  // modal do morador
+  const [open, setOpen] = React.useState(false); // modal da propriedade
+  const [openMorador, setOpenMorador] = React.useState(false); // modal do morador
+  const isApartamento =
+    propriedade.tipo_propriedade?.toLowerCase() === "apartamento";
 
   const [morador, setMorador] = React.useState<Morador | null>(null);
   const [loadingMorador, setLoadingMorador] = React.useState(false);
@@ -146,7 +183,10 @@ export function PropriedadeCard({
   const [erroFaturas, setErroFaturas] = React.useState<string | null>(null);
 
   const openModal = () => setOpen(true);
-  const stop = (e: React.SyntheticEvent) => { e.preventDefault(); e.stopPropagation(); };
+  const stop = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   // Carrega Faturas quando a modal abre (por propriedade)
   React.useEffect(() => {
@@ -158,7 +198,9 @@ export function PropriedadeCard({
         setErroFaturas(null);
         const { data, error } = await supabase
           .from("fatura")
-          .select("id, titulo, valor, estado_fatura, tipo_fatura, moeda, descricao, recibo_url, created_at, updated_at")
+          .select(
+            "id, titulo, valor, estado_fatura, tipo_fatura, moeda, descricao, recibo_url, created_at, updated_at"
+          )
           .eq("propriedade_id", propriedade.id)
           .order("created_at", { ascending: false });
 
@@ -173,11 +215,15 @@ export function PropriedadeCard({
         if (!cancelado) setLoadingFaturas(false);
       }
     })();
-    return () => { cancelado = true; };
+    return () => {
+      cancelado = true;
+    };
   }, [open, propriedade.id]);
 
   // Abre modal de morador e carrega dados (se existir morador_id)
-  const handleOpenMorador: React.MouseEventHandler<HTMLButtonElement> = async (e) => {
+  const handleOpenMorador: React.MouseEventHandler<HTMLButtonElement> = async (
+    e
+  ) => {
     stop(e);
     setOpenMorador(true);
 
@@ -192,7 +238,9 @@ export function PropriedadeCard({
       setErroMorador(null);
       const { data, error } = await supabase
         .from("morador")
-        .select("id, nome, email, telefone, bi, estado_utilizador, foto, created_at, updated_at")
+        .select(
+          "id, nome, email, telefone, bi, estado_utilizador, foto, created_at, updated_at"
+        )
         .eq("id", propriedade.morador_id)
         .single();
 
@@ -206,10 +254,14 @@ export function PropriedadeCard({
     }
   };
 
-  const handlePassarFatura: React.MouseEventHandler<HTMLButtonElement> = (e) => {
+  const handlePassarFatura: React.MouseEventHandler<HTMLButtonElement> = (
+    e
+  ) => {
     stop(e);
     if (onPassarFatura) return onPassarFatura(propriedade);
-    console.warn("onPassarFatura não foi fornecido. Implemente para abrir o fluxo de emissão.");
+    console.warn(
+      "onPassarFatura não foi fornecido. Implemente para abrir o fluxo de emissão."
+    );
   };
 
   return (
@@ -218,7 +270,12 @@ export function PropriedadeCard({
         role="button"
         tabIndex={0}
         onClick={openModal}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openModal(); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openModal();
+          }
+        }}
         className={cn(
           "flex h-full w-full flex-col",
           "rounded-2xl border border-muted/40 shadow-sm transition-all",
@@ -226,9 +283,14 @@ export function PropriedadeCard({
           "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         )}
       >
-        <CardHeader className={cn("relative flex items-start justify-between gap-4", "rounded-t-2xl p-5 w-full")}>
+        <CardHeader
+          className={cn(
+            "relative flex items-start justify-between gap-4",
+            "rounded-t-2xl p-5 w-full"
+          )}
+        >
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-14 items-center justify-center rounded-2xl ring-2 ring-background shadow">
+            <div className="flex size-14 items-center justify-center rounded-2xl ring-2 bg-gray-100 ring-background shadow">
               <Home className="size-6" />
             </div>
 
@@ -247,13 +309,24 @@ export function PropriedadeCard({
           </div>
 
           <div className="flex flex-shrink-0 items-start gap-2">
-            <Badge variant="outline" className={cn("rounded-xl", toneEstado(propriedade.estado_propriedade))}>
+            <Badge
+              variant="outline"
+              className={cn(
+                "rounded-xl",
+                toneEstado(propriedade.estado_propriedade)
+              )}
+            >
               {propriedade.estado_propriedade}
             </Badge>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className="rounded-xl" onClick={stop}>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="rounded-xl"
+                  onClick={stop}
+                >
                   <MoreVertical className="size-5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -261,7 +334,10 @@ export function PropriedadeCard({
                 <DropdownMenuItem onClick={() => onEdit?.(propriedade)}>
                   <Pencil className="mr-2 size-4" /> Editar
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete?.(propriedade)}>
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => onDelete?.(propriedade)}
+                >
                   <Trash2 className="mr-2 size-4" /> Apagar
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -275,7 +351,13 @@ export function PropriedadeCard({
               <Layers className="size-4 shrink-0" />
               <span className="min-w-0 truncate">
                 Tipo:
-                <Badge variant="outline" className={cn("ml-2 rounded-xl", toneTipo(propriedade.tipo_propriedade))}>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "ml-2 rounded-xl",
+                    toneTipo(propriedade.tipo_propriedade)
+                  )}
+                >
                   {propriedade.tipo_propriedade}
                 </Badge>
               </span>
@@ -284,7 +366,9 @@ export function PropriedadeCard({
             <div className="flex items-center gap-2 rounded-xl border p-3">
               <User className="size-4 shrink-0" />
               <span className="min-w-0 truncate">
-                Morador: {relations?.morador_nome || (propriedade.morador_id ? "—" : "—")}
+                Morador:{" "}
+                {relations?.morador_nome ||
+                  (propriedade.morador_id ? "—" : "—")}
               </span>
             </div>
 
@@ -295,12 +379,15 @@ export function PropriedadeCard({
               </span>
             </div>
 
-            <div className="flex items-center gap-2 rounded-xl border p-3">
-              <Car className="size-4 shrink-0" />
-              <span className="min-w-0 truncate">
-                Estacionamento: {propriedade.tem_estacionamento ? "Sim" : "Não"}
-              </span>
-            </div>
+            {isApartamento && (
+              <div className="flex items-center gap-2 rounded-xl border p-3">
+                <Car className="size-4 shrink-0" />
+                <span className="min-w-0 truncate">
+                  Estacionamento:{" "}
+                  {propriedade.tem_estacionamento ? "Sim" : "Não"}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 rounded-xl border">
@@ -308,14 +395,18 @@ export function PropriedadeCard({
               <div className="flex items-center gap-2 text-muted-foreground">
                 <CalendarClock className="size-4" /> Criado
               </div>
-              <span className="font-medium">{fmtDateTime(propriedade.created_at)}</span>
+              <span className="font-medium">
+                {fmtDateTime(propriedade.created_at)}
+              </span>
             </div>
             <Separator />
             <div className="flex items-center justify-between px-4 py-3 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <CalendarClock className="size-4" /> Atualizado
               </div>
-              <span className="font-medium">{fmtDateTime(propriedade.updated_at)}</span>
+              <span className="font-medium">
+                {fmtDateTime(propriedade.updated_at)}
+              </span>
             </div>
           </div>
 
@@ -336,7 +427,9 @@ export function PropriedadeCard({
               className="rounded-xl"
               onClick={handleOpenMorador}
               disabled={!propriedade.morador_id}
-              title={propriedade.morador_id ? "Ver morador" : "Sem morador associado"}
+              title={
+                propriedade.morador_id ? "Ver morador" : "Sem morador associado"
+              }
             >
               <User className="mr-2 size-4" /> Ver morador
             </Button>
@@ -354,7 +447,9 @@ export function PropriedadeCard({
               </div>
               <span>{relations?.condominio_nome || "Propriedade"}</span>
             </DialogTitle>
-            <DialogDescription className="sr-only">Mais informações da propriedade</DialogDescription>
+            <DialogDescription className="sr-only">
+              Mais informações da propriedade
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -364,14 +459,22 @@ export function PropriedadeCard({
                 <div className="mb-1 flex items-center gap-2 text-muted-foreground">
                   <MapPin className="size-4" /> Morada
                 </div>
-                <div className="font-medium break-words">{fullAddress(propriedade)}</div>
+                <div className="font-medium break-words">
+                  {fullAddress(propriedade)}
+                </div>
               </div>
               <div className="rounded-xl border p-3 text-sm">
                 <div className="mb-1 flex items-center gap-2 text-muted-foreground">
                   <Layers className="size-4" /> Tipo
                 </div>
                 <div className="font-medium">
-                  <Badge variant="outline" className={cn("rounded-xl", toneTipo(propriedade.tipo_propriedade))}>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "rounded-xl",
+                      toneTipo(propriedade.tipo_propriedade)
+                    )}
+                  >
                     {propriedade.tipo_propriedade}
                   </Badge>
                 </div>
@@ -381,7 +484,9 @@ export function PropriedadeCard({
                   <Building2 className="size-4" /> Condomínio
                 </div>
                 <div className="font-medium">
-                  {relations?.condominio_nome || propriedade.condominio_id || "—"}
+                  {relations?.condominio_nome ||
+                    propriedade.condominio_id ||
+                    "—"}
                 </div>
               </div>
               <div className="rounded-xl border p-3 text-sm">
@@ -401,45 +506,86 @@ export function PropriedadeCard({
                   <ReceiptText className="size-4" /> Faturas
                 </div>
                 {Array.isArray(faturas) && faturas.length > 0 ? (
-                  <Badge variant="outline" className="rounded-xl">{faturas.length}</Badge>
+                  <Badge variant="outline" className="rounded-xl">
+                    {faturas.length}
+                  </Badge>
                 ) : null}
               </div>
               <Separator />
 
               {loadingFaturas ? (
-                <div className="px-4 py-6 text-sm text-muted-foreground">A carregar…</div>
+                <div className="px-4 py-6 text-sm text-muted-foreground">
+                  A carregar…
+                </div>
               ) : erroFaturas ? (
-                <div className="px-4 py-6 text-sm text-destructive">{erroFaturas}</div>
+                <div className="px-4 py-6 text-sm text-destructive">
+                  {erroFaturas}
+                </div>
               ) : !faturas || faturas.length === 0 ? (
-                <div className="px-4 py-6 text-sm text-muted-foreground">Sem faturas para esta propriedade.</div>
+                <div className="px-4 py-6 text-sm text-muted-foreground">
+                  Sem faturas para esta propriedade.
+                </div>
               ) : (
                 <div className="max-h-64 overflow-auto">
                   <ul className="divide-y">
                     {faturas.map((f) => (
-                      <li key={f.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <li
+                        key={f.id}
+                        className="flex items-center justify-between gap-3 px-4 py-3"
+                      >
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 text-sm">
-                            <span className="font-medium truncate">{f.titulo}</span>
-                            <Badge variant="outline" className={cn("rounded-xl", toneFatura(f.estado_fatura))}>
+                            <span className="font-medium truncate">
+                              {f.titulo}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "rounded-xl",
+                                toneFatura(f.estado_fatura)
+                              )}
+                            >
                               {f.estado_fatura}
                             </Badge>
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {f.created_at ? new Date(f.created_at).toLocaleDateString("pt-PT") : "—"}
+                            {f.created_at
+                              ? new Date(f.created_at).toLocaleDateString(
+                                  "pt-PT"
+                                )
+                              : "—"}
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="text-sm font-semibold">
-                            {f.moeda?.toUpperCase() === "EUR" ? eur.format(f.valor) : `${f.valor} ${f.moeda || ""}`}
+                            {f.moeda?.toUpperCase() === "EUR"
+                              ? eur.format(f.valor)
+                              : `${f.valor} ${f.moeda || ""}`}
                           </div>
                           {f.recibo_url ? (
                             <div className="flex items-center gap-2">
-                              <Button asChild variant="outline" size="icon" className="size-8" title="Abrir PDF">
-                                <a href={f.recibo_url} target="_blank" rel="noopener noreferrer">
+                              <Button
+                                asChild
+                                variant="outline"
+                                size="icon"
+                                className="size-8"
+                                title="Abrir PDF"
+                              >
+                                <a
+                                  href={f.recibo_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
                                   <ExternalLink className="size-4" />
                                 </a>
                               </Button>
-                              <Button asChild variant="ghost" size="icon" className="size-8" title="Transferir PDF">
+                              <Button
+                                asChild
+                                variant="ghost"
+                                size="icon"
+                                className="size-8"
+                                title="Transferir PDF"
+                              >
                                 <a href={f.recibo_url} download>
                                   <Download className="size-4" />
                                 </a>
@@ -456,8 +602,16 @@ export function PropriedadeCard({
           </div>
 
           <DialogFooter className="mt-2">
-            <DialogClose asChild><Button variant="secondary">Fechar</Button></DialogClose>
-            <Button variant="default" onClick={(e) => { e.preventDefault(); onPassarFatura?.(propriedade); }}>
+            <DialogClose asChild>
+              <Button variant="secondary">Fechar</Button>
+            </DialogClose>
+            <Button
+              variant="default"
+              onClick={(e) => {
+                e.preventDefault();
+                onPassarFatura?.(propriedade);
+              }}
+            >
               <ReceiptText className="mr-2 size-4" /> Passar fatura
             </Button>
           </DialogFooter>
@@ -473,12 +627,20 @@ export function PropriedadeCard({
                 {morador?.foto ? (
                   <AvatarImage src={morador.foto} alt={morador.nome} />
                 ) : (
-                  <AvatarFallback>{getInitials(morador?.nome || relations?.morador_nome || "")}</AvatarFallback>
+                  <AvatarFallback>
+                    {getInitials(
+                      morador?.nome || relations?.morador_nome || ""
+                    )}
+                  </AvatarFallback>
                 )}
               </Avatar>
-              <span>{morador?.nome || relations?.morador_nome || "Morador"}</span>
+              <span>
+                {morador?.nome || relations?.morador_nome || "Morador"}
+              </span>
             </DialogTitle>
-            <DialogDescription className="sr-only">Informações do morador</DialogDescription>
+            <DialogDescription className="sr-only">
+              Informações do morador
+            </DialogDescription>
           </DialogHeader>
 
           {!propriedade.morador_id ? (
@@ -486,9 +648,13 @@ export function PropriedadeCard({
               Esta propriedade não tem um morador associado.
             </div>
           ) : loadingMorador ? (
-            <div className="rounded-xl border p-4 text-sm text-muted-foreground">A carregar…</div>
+            <div className="rounded-xl border p-4 text-sm text-muted-foreground">
+              A carregar…
+            </div>
           ) : erroMorador ? (
-            <div className="rounded-xl border p-4 text-sm text-destructive">{erroMorador}</div>
+            <div className="rounded-xl border p-4 text-sm text-destructive">
+              {erroMorador}
+            </div>
           ) : (
             <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -496,7 +662,12 @@ export function PropriedadeCard({
                   <div className="mb-1 flex items-center gap-2 text-muted-foreground">
                     <Mail className="size-4" /> Email
                   </div>
-                  <a className="font-medium break-words" href={morador?.email ? `mailto:${morador.email}` : undefined}>
+                  <a
+                    className="font-medium break-words"
+                    href={
+                      morador?.email ? `mailto:${morador.email}` : undefined
+                    }
+                  >
                     {morador?.email || "—"}
                   </a>
                 </div>
@@ -504,7 +675,12 @@ export function PropriedadeCard({
                   <div className="mb-1 flex items-center gap-2 text-muted-foreground">
                     <Phone className="size-4" /> Telefone
                   </div>
-                  <a className="font-medium" href={morador?.telefone ? `tel:${morador.telefone}` : undefined}>
+                  <a
+                    className="font-medium"
+                    href={
+                      morador?.telefone ? `tel:${morador.telefone}` : undefined
+                    }
+                  >
                     {morador?.telefone || "—"}
                   </a>
                 </div>
@@ -529,21 +705,27 @@ export function PropriedadeCard({
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <CalendarClock className="size-4" /> Criado
                   </div>
-                  <span className="font-medium">{fmtDateTime(morador?.created_at)}</span>
+                  <span className="font-medium">
+                    {fmtDateTime(morador?.created_at)}
+                  </span>
                 </div>
                 <Separator />
                 <div className="flex items-center justify-between px-4 py-3 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <CalendarClock className="size-4" /> Atualizado
                   </div>
-                  <span className="font-medium">{fmtDateTime(morador?.updated_at)}</span>
+                  <span className="font-medium">
+                    {fmtDateTime(morador?.updated_at)}
+                  </span>
                 </div>
               </div>
             </div>
           )}
 
           <DialogFooter className="mt-2">
-            <DialogClose asChild><Button variant="secondary">Fechar</Button></DialogClose>
+            <DialogClose asChild>
+              <Button variant="secondary">Fechar</Button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>

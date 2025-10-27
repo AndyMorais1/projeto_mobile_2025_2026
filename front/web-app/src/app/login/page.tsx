@@ -119,7 +119,7 @@ export default function LoginPage() {
 
         <CardFooter className="justify-center pb-6 pt-0">
           <p className="text-xs text-muted-foreground">
-            Dica: se for admin novo, use a senha temporária enviada por email.
+            {/*© 2024 myKondô. Todos os direitos reservados.*/}
           </p>
         </CardFooter>
       </Card>

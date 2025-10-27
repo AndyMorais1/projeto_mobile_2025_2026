@@ -90,7 +90,7 @@ export function MoradorCard({ morador }: { morador: Morador }) {
       <CardHeader className="relative flex items-start justify-between gap-4 rounded-t-2xl p-5">
         <div className="flex items-center gap-4">
           <div className="relative">
-            <Avatar className="size-14 rounded-xl ring-2 ring-white dark:ring-neutral-900 shadow-sm">
+            <Avatar className="size-14 rounded-full ring-2 ring-white dark:ring-neutral-900 shadow-sm">
               {morador.foto ? (
                 <AvatarImage src={morador.foto} alt={morador.nome} />
               ) : (

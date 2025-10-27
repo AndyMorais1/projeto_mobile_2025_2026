@@ -87,9 +87,9 @@ export function CondominioCard({
         "hover:shadow-lg hover:border-muted focus:outline-none cursor-pointer"
       )}
     >
-      <CardHeader className="relative flex items-start justify-between gap-4 bg-gradient-to-r from-muted/40 to-transparent rounded-t-2xl p-5">
+      <CardHeader className="relative flex items-start justify-between gap-4  rounded-t-2xl p-5">
         <div className="flex items-center gap-3">
-          <div className="flex size-14 items-center justify-center rounded-2xl ring-2 ring-background shadow">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-gray-100 ring-2 ring-background shadow">
             <Building2 className="size-6" />
           </div>
           <div className="space-y-1">

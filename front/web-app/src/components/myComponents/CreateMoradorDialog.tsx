@@ -14,13 +14,14 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectTrigger, SelectContent, SelectItem, SelectValue,
 } from "@/components/ui/select";
+import { es } from "date-fns/locale";
 
 export type NewMoradorInput = {
   nome: string;
   email: string;
   telefone?: string | null;
   bi?: string | null;
-  foto?: string | null;
+  foto?: string | null; // será preenchido com a URL do Storage
 };
 
 type Props = {
@@ -57,6 +58,12 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [successMsg, setSuccessMsg] = React.useState<string | null>(null);
 
+  // ---- estados do upload de foto ----
+  const [fotoFile, setFotoFile] = React.useState<File | null>(null);
+  const [fotoPreview, setFotoPreview] = React.useState<string | null>(null);
+  const [fotoUploading, setFotoUploading] = React.useState(false);
+  const [fotoProgress, setFotoProgress] = React.useState<number>(0);
+
   function update<K extends keyof NewMoradorInput>(key: K, val: NewMoradorInput[K]) {
     setForm((f) => ({ ...f, [key]: val }));
   }
@@ -71,11 +78,11 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
         .order("created_at");
       if (!error && data) {
         setCondominios(data as Condominio[]);
-        // seleciona o primeiro por padrão se nenhum escolhido
         if (!condominioId && data.length > 0) setCondominioId(data[0].id);
       }
       setLoadingCondos(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // inicial
 
   // 2) Carrega propriedades do condomínio selecionado (apenas disponíveis)
@@ -94,9 +101,14 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
         .is("morador_id", null) // só disponíveis (sem morador)
         .order("created_at");
       if (!error && data) {
-        const list = data.map((p) => ({ id: p.id, rua: p.rua, numero: p.numero, andar: p.andar, nome_propriedade: p.nome_propriedade })) as Propriedade[];
+        const list = data.map((p) => ({
+          id: p.id,
+          rua: p.rua,
+          numero: p.numero,
+          andar: p.andar,
+          nome_propriedade: p.nome_propriedade,
+        })) as Propriedade[];
         setPropriedades(list);
-        // limpa seleção anterior e escolhe a primeira disponível
         setPropriedadeId(list[0]?.id ?? "");
       } else {
         setPropriedades([]);
@@ -105,6 +117,72 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
       setLoadingProps(false);
     })();
   }, [condominioId]);
+
+  // 3) Upload da foto para o bucket user_fotos
+  async function uploadFotoToStorage(file: File): Promise<string> {
+    setFotoUploading(true);
+    setFotoProgress(0);
+
+    // validações
+    if (!file.type.startsWith("image/")) throw new Error("Selecione uma imagem válida.");
+    if (file.size > 5 * 1024 * 1024) throw new Error("Imagem deve ter até 5MB.");
+
+    const ext = file.name.split(".").pop() || "jpg";
+    const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const path = `uploads/${unique}.${ext}`; // você pode trocar para auth.uid()/... se quiser
+
+    // Algumas versões do supabase-js ainda não declaram onUploadProgress nos tipos
+    const { error } = await (supabase.storage
+      .from("user_fotos")
+      .upload(path, file, {
+        cacheControl: "3600",
+        contentType: file.type,
+        upsert: false,
+        // @ts-ignore
+        onUploadProgress: (ev: ProgressEvent) => {
+          if (ev.lengthComputable) {
+            setFotoProgress(Math.round((ev.loaded / ev.total) * 100));
+          }
+        },
+      }) as any);
+
+    if (error) {
+      setFotoUploading(false);
+      throw new Error(error.message);
+    }
+
+    // Se o bucket user_fotos for PÚBLICO:
+    const { data } = supabase.storage.from("user_fotos").getPublicUrl(path);
+    setFotoUploading(false);
+    return data.publicUrl;
+
+    // Se o bucket for PRIVADO, use URL assinada:
+    // const { data: signed, error: signErr } = await supabase.storage
+    //   .from("user_fotos").createSignedUrl(path, 60 * 60);
+    // if (signErr) { setFotoUploading(false); throw new Error(signErr.message); }
+    // setFotoUploading(false);
+    // return signed.signedUrl;
+  }
+
+  // 4) Handler do input de arquivo: sobe a foto e preenche form.foto
+  async function onFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] || null;
+    if (!f) return;
+
+    setErrorMsg(null);
+    setFotoFile(f);
+    setFotoPreview(URL.createObjectURL(f));
+
+    try {
+      const url = await uploadFotoToStorage(f);
+      update("foto", url); // mantém o fluxo atual (Edge Function recebe string)
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Falha ao enviar a foto.");
+      setFotoFile(null);
+      setFotoPreview(null);
+      update("foto", "");
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -123,6 +201,10 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
       setErrorMsg("Selecione uma casa/propriedade do condomínio.");
       return;
     }
+    if (fotoUploading) {
+      setErrorMsg("Aguarde o término do upload da foto.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -131,7 +213,7 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
       if (sessionErr || !sessionData?.session) throw new Error("Sessão inválida. Faça login novamente.");
       const jwt = sessionData.session.access_token;
 
-      // 3) Cria morador via Edge Function (envia email + senha temporária)
+      // 5) Cria morador via Edge Function (envia email + senha temporária)
       const functionsBase = getFunctionsBaseUrl();
       const res = await fetch(`${functionsBase}/admin_create_morador`, {
         method: "POST",
@@ -141,7 +223,7 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
           email: form.email.trim(),
           telefone: form.telefone?.trim() || null,
           bi: form.bi?.trim() || null,
-          foto: form.foto?.trim() || null,
+          foto: form.foto?.trim() || null, // já com URL vinda do Storage
         }),
       });
 
@@ -151,17 +233,15 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
       }
       const newUserId: string = payload.user_id;
 
-      // 4) Atribui a propriedade ao morador recém-criado
-      //    (certifica-te de que RLS permite o admin atualizar morador_id)
+      // 6) Atribui a propriedade ao morador recém-criado
       const { error: updErr } = await supabase
         .from("propriedade")
-        .update({ morador_id: newUserId })
+        .update({ morador_id: newUserId, estado_propriedade: "ocupada" })
         .eq("id", propriedadeId)
         .eq("condominio_id", condominioId)
-        .is("morador_id", null); // garante que ainda está livre
+        .is("morador_id", null);
 
       if (updErr) {
-        // Se falhar, podes reverter o morador criado ou notificar o admin
         throw new Error(`Morador criado, mas falhou atribuir a propriedade: ${updErr.message}`);
       }
 
@@ -177,6 +257,9 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
       setTimeout(() => {
         setOpen(false);
         setForm({ nome: "", email: "", telefone: "", bi: "", foto: "" });
+        setFotoFile(null);
+        setFotoPreview(null);
+        setFotoProgress(0);
         setSuccessMsg(null);
       }, 500);
     } catch (err: any) {
@@ -189,7 +272,6 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
   const renderPropLabel = (p: Propriedade) => {
     const parts = [p.rua, p.numero, p.andar].filter(Boolean);
     return parts.length ? parts.join(", ") : `Propriedade ${p.id.slice(0, 6)}`;
-    // adapta aqui conforme teu modelo (ex.: bloco/apto)
   };
 
   return (
@@ -237,7 +319,7 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
             />
           </div>
 
-          {/* Telefone / BI / Foto (opcionais) */}
+          {/* Telefone / BI */}
           <div className="grid gap-2">
             <Label htmlFor="telefone">Telefone (opcional)</Label>
             <Input
@@ -260,14 +342,36 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
             />
           </div>
 
+          {/* Foto: upload para user_fotos */}
           <div className="grid gap-2">
-            <Label htmlFor="foto">URL da foto (opcional)</Label>
+            <Label htmlFor="foto">Foto (opcional)</Label>
             <Input
               id="foto"
-              placeholder="https://..."
+              type="file"
+              accept="image/*"
+              onChange={onFotoChange}
+              disabled={submitting || fotoUploading}
+            />
+            {fotoPreview && (
+              <img
+                src={fotoPreview}
+                alt="Pré-visualização"
+                className="mt-2 max-h-20 rounded-md"
+              />
+            )}
+            {fotoUploading && (
+              <p className="text-sm text-muted-foreground">
+                Enviando foto… {fotoProgress}%
+              </p>
+            )}
+            {/* Campo somente leitura com a URL preenchida após upload */}
+            <Input
+              type="text"
               value={form.foto ?? ""}
               onChange={(e) => update("foto", e.target.value)}
-              disabled={submitting}
+              placeholder="URL da foto (preenchido após upload)"
+              disabled
+              className="opacity-60"
             />
           </div>
 
@@ -307,7 +411,7 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
                 {propriedades.length > 0 ? (
                   propriedades.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.nome_propriedade}
+                      {p.nome_propriedade || renderPropLabel(p)}
                     </SelectItem>
                   ))
                 ) : (
@@ -326,7 +430,7 @@ export function CreateMoradorDialog({ onCreated, defaultOpen }: Props) {
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={submitting || !condominioId || !propriedadeId}>
+            <Button type="submit" disabled={submitting || !condominioId || !propriedadeId || fotoUploading}>
               {submitting ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />

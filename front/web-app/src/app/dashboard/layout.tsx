@@ -16,7 +16,8 @@ export default function Layout({ children }: { children: ReactNode }) {
     pathname !== "/dashboard" &&
     pathname !== "/dashboard/profile" &&
     pathname !== "/dashboard/admins" &&
-    pathname !== "/dashboard/condominios";
+    pathname !== "/dashboard/condominios" &&
+    pathname !== "/dashboard/atividades";
 
   return (
     <CondominiumProvider>
