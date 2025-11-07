@@ -1,110 +1,121 @@
-import { View, Text, TouchableOpacity, FlatList } from "react-native";
 import { useState } from "react";
+import { View, Text, FlatList } from "react-native";
+import { CardFinanceiro, SearchBar, ModalPagamento} from "@/components/financas";
+
+
+
 
 export default function Financas() {
-  const [activeTable, setActiveTable] = useState<"pagamentos" | "recibos">(
-    "pagamentos"
-  );
+    const [activeTable, setActiveTable] = useState<"pagamentos" | "recibos">("pagamentos");
 
-  // Dados vazios por enquanto
-  const pagamentos: any[] = [
-    {
-      estado: "Pendente",
-      descricao: "Condomínio Maio",
-      limite: "2024-05-10",
-      valor: "$ 500,00",
-    },
-  ];
-  const recibos: any[] = [
-    { data: "2024-05-05", descricao: "Recibo Condomínio Abril" },
-  ];
+    // ======= DADOS SIMULADOS =======
+    const pagamentos = [
+        { descricao: "Água", valor: 33, mes: "Setembro", ano: 2025 },
+        { descricao: "Gás", valor: 29.69, mes: "Setembro", ano: 2025 },
+        { descricao: "Electricidade", valor: 22, mes: "Setembro", ano: 2025 },
+    ];
 
-  // Renderização de cada card de pagamento
-  const renderPagamento = ({ item }: any) => (
-    <View className="bg-gray-200 rounded-xl p-4 mb-4">
-      <Text className="font-bold mb-1">Estado: {item.estado || "-"}</Text>
-      <Text className="mb-1">Descrição: {item.descricao || "-"}</Text>
-      <Text className="mb-1">Limite: {item.limite || "-"}</Text>
-      <Text className="mb-1">Valor: {item.valor || "-"}</Text>
-      <View className="flex-row space-x-2 mt-2">
-        <TouchableOpacity className="bg-blue-500 px-3 py-1 rounded">
-          <Text className="text-white font-semibold">Pagar</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    const recibos = [
+        { data: "18/09/2025", descricao: "Água" },
+        { data: "18/09/2025", descricao: "Conta de água" },
+    ];
 
-  // Renderização de cada card de recibo
-  const renderRecibo = ({ item }: any) => (
-    <View className="bg-gray-200 rounded-xl p-4 mb-4  ">
-      <Text className="font-bold mb-1">Data: {item.data || "-"}</Text>
-      <Text className="mb-1">Descrição: {item.descricao || "-"}</Text>
-      <View className="flex-row space-x-2 mt-2">
-        <TouchableOpacity className="bg-blue-500 px-3 py-1 rounded">
-          <Text className="text-white font-semibold">Baixar</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    // ======= ESTADOS DO MODAL =======
+    const [modalVisible, setModalVisible] = useState(false);
+    const [pagamentoSelecionado, setPagamentoSelecionado] = useState<any>(null);
 
-  return (
-    <View className="flex-1 bg-white pt-6 px-4">
-      {/* Botões para alternar tabelas */}
-      <View className="flex-row justify-around mb-6 ">
-        <TouchableOpacity onPress={() => setActiveTable("pagamentos")}>
-          <Text
-            className={`text-lg font-semibold ${
-              activeTable === "pagamentos" ? "text-blue-500" : "text-gray-500"
-            }`}
-          >
-            Pagamentos
-          </Text>
-        </TouchableOpacity>
+    // ======= INTERFACE =======
+    return (
+        <View className="flex-1 bg-white pt-6 px-4">
 
-        <TouchableOpacity onPress={() => setActiveTable("recibos")}>
-          <Text
-            className={`text-lg font-semibold ${
-              activeTable === "recibos" ? "text-blue-500" : "text-gray-500"
-            }`}
-          >
-            Recibos
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Cards de Pagamentos */}
-      {activeTable === "pagamentos" && (
-        <FlatList
-          data={pagamentos}
-          keyExtractor={(item, index) => index.toString()}
-          renderItem={renderPagamento}
-          ListEmptyComponent={() => (
-            <View className="items-center py-20">
-              <Text className="text-gray-400">
-                Nenhum pagamento registrado ainda
-              </Text>
+            {/* Botões de abas */}
+            <View className="flex-row justify-around mb-8">
+                <Text
+                    onPress={() => setActiveTable("pagamentos")}
+                    className={`text-lg font-semibold ${
+                        activeTable === "pagamentos"
+                            ? "text-blue-500 border-b-2 border-blue-500 pb-1"
+                            : "text-gray-500"
+                    }`}
+                >
+                    Pagamentos
+                </Text>
+                <Text
+                    onPress={() => setActiveTable("recibos")}
+                    className={`text-lg font-semibold ${
+                        activeTable === "recibos"
+                            ? "text-blue-500 border-b-2 border-blue-500 pb-1"
+                            : "text-gray-500"
+                    }`}
+                >
+                    Recibos
+                </Text>
             </View>
-          )}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      )}
 
-      {/* Cards de Recibos */}
-      {activeTable === "recibos" && (
-        <FlatList
-          data={recibos}
-          keyExtractor={(item, index) => index.toString()}
-          renderItem={renderRecibo}
-          ListEmptyComponent={() => (
-            <View className="items-center py-20">
-              <Text className="text-gray-400">
-                Nenhum recibo registrado ainda
-              </Text>
-            </View>
-          )}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      )}
-    </View>
-  );
+            {/* Barra de pesquisa */}
+            {activeTable === "recibos" && (
+                <SearchBar
+                    value={""}
+                    onChangeText={() => {}}
+                />
+            )}
+
+            {/* Lista de PAGAMENTOS */}
+            {activeTable === "pagamentos" && (
+                <FlatList
+                    data={pagamentos}
+                    keyExtractor={(item, i) => i.toString()}
+                    renderItem={({ item }) => (
+                        <CardFinanceiro
+                            tipo="pagamento"
+                            {...item}
+                            onPagar={() => {
+                                setPagamentoSelecionado(item);
+                                setModalVisible(true);
+                            }}
+                        />
+                    )}
+                    ListEmptyComponent={() => (
+                        <View className="items-center py-20">
+                            <Text className="text-gray-400">
+                                Nenhum pagamento registado ainda
+                            </Text>
+                        </View>
+                    )}
+                    contentContainerStyle={{ paddingBottom: 40 }}
+                />
+            )}
+
+            {/* Lista de RECIBOS */}
+            {activeTable === "recibos" && (
+                <FlatList
+                    data={recibos}
+                    keyExtractor={(item, i) => i.toString()}
+                    renderItem={({ item }) => (
+                        <CardFinanceiro tipo="recibo" {...item} />
+                    )}
+                    ListEmptyComponent={() => (
+                        <View className="items-center py-20">
+                            <Text className="text-gray-400">
+                                Nenhum recibo registado ainda
+                            </Text>
+                        </View>
+                    )}
+                    contentContainerStyle={{ paddingBottom: 40 }}
+                />
+            )}
+
+            {/* MODAL DE PAGAMENTO */}
+            <ModalPagamento
+                visible={modalVisible}
+                valor={pagamentoSelecionado?.valor}
+                descricao={pagamentoSelecionado?.descricao}
+                onClose={() => setModalVisible(false)}
+                onConfirm={(metodo: any) => {
+                    console.log("Pagamento confirmado via", metodo);
+                    setModalVisible(false);
+                }}
+            />
+        </View>
+    );
 }
