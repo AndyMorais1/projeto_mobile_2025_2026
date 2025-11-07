@@ -56,7 +56,7 @@ const items = [
     icon: Info,
   },
   {
-    title: "Pedidos",
+    title: "pedidos",
     url: "/dashboard/pedidos",
     icon: NotebookPen,
   },

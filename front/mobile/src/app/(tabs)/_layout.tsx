@@ -1,7 +1,6 @@
 import { Tabs } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import Feather from "@expo/vector-icons/Feather";
-import { Header } from "@/src/components/header";
 
 export default function TabsLayout() {
   return (
@@ -10,6 +9,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: "#4da3ff",
         tabBarInactiveTintColor: "#9ca3af",
         headerShown: false,
+      // tabBarShowLabel: false,
       }}
     >
       <Tabs.Screen
@@ -33,18 +33,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="pedidos/index"
         options={{
-          title: "Pedidos",
+          title: "pedidos",
           tabBarIcon: ({ color, size }) => (
             <Feather name="box" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="infopoint/index"
-        options={{
-          title: "Info",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="information-circle-outline" size={size} color={color} />
           ),
         }}
       />
@@ -57,6 +48,16 @@ export default function TabsLayout() {
           ),
         }}
       />
+        {/** chat pra cima, info point gone and a profile */}
+        <Tabs.Screen
+            name="perfil/index"
+            options={{
+                title: "Perfil",
+                tabBarIcon: ({ color, size }) => (
+                    <Ionicons name="person-outline" size={size} color={color} />
+                ),
+            }}
+        />
     </Tabs>
   );
 }
