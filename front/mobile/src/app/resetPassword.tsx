@@ -10,6 +10,7 @@ import {
     Alert,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
+import { supabase }  from "../api/client";
 
 export default function ResetPasswordScreen() {
     const router = useRouter();
@@ -18,23 +19,56 @@ export default function ResetPasswordScreen() {
 
     // ====================== acção pra clicar "atualizar" ======================
 
-    const handleReset = () => {
-        /* Validação futura:
 
+
+    const handleReset = async () => {
         if (newPassword.trim() === "" || confirmPassword.trim() === "") {
-            Alert.alert("Atenção", "Por favor, preencha ambos os campos.");
+            Alert.alert("Atenção", "Preencha ambos os campos.");
             return;
         }
         if (newPassword !== confirmPassword) {
             Alert.alert("Erro", "As palavras-passe não coincidem.");
             return;
         }
-        */
 
-        //  depois coloca ra lógica real (API de redefinição)
-        // Por enquanto redirecionar pra Home
-        router.push("/(tabs)"); // fluxo temporário: vai direto à home
+        try {
+            // Pega o utilizador autenticado
+            const { data: userData } = await supabase.auth.getUser();
+            const user = userData?.user;
+            if (!user) {
+                Alert.alert("Erro", "Sessão inválida. Faça login novamente.");
+                return;
+            }
+
+            // Atualiza a palavra-passe no Supabase Auth
+            const { error: updateErr } = await supabase.auth.updateUser({
+                password: newPassword,
+            });
+            if (updateErr) {
+                Alert.alert("Erro", updateErr.message);
+                return;
+            }
+
+            // Marca o utilizador como "já redefiniu a senha"
+            const { error: flagErr } = await supabase
+                .from("morador")
+                .update({ must_reset_password: false })
+                .eq("id", user.id);
+
+            if (flagErr) {
+                console.warn("Aviso: falha ao atualizar flag no morador", flagErr.message);
+            }
+
+            //  Confirma
+            Alert.alert("Sucesso", "Palavra-passe atualizada com sucesso!");
+            router.replace("/(tabs)");
+        } catch (err) {
+            Alert.alert("Erro", "Não foi possível redefinir a palavra-passe.");
+            console.error(err);
+        }
     };
+
+
 
     return (
         <>

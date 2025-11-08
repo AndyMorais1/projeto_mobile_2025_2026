@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ScrollView, View, Text } from "react-native";
+import { useEffect, useState } from "react";
+import { ScrollView, View, Text, ActivityIndicator } from "react-native";
 import { Header } from "@/components/header";
 import {
     QuickActions,
@@ -7,13 +7,47 @@ import {
     CarroselDeAnuncios,
     ModalDeAnuncios,
 } from "@/components/home";
+import { supabase } from "@/api/client";
 
 export default function HomeScreen() {
+
+    // ====================== ESTADOS ======================
     const [modalVisible, setModalVisible] = useState(false);
     const [anuncioSelecionado, setAnuncioSelecionado] = useState<any>(null);
-    const usuario = "Carla";
+    const [nomeUser, setNomeUser] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
 
+    // ====================== CARREGAR UTILIZADOR ======================
 
+    useEffect(() => {
+        async function fetchUserName() {
+            try {
+                // pegar utilizador autenticado
+                const { data: { user }, error: userError } = await supabase.auth.getUser();
+                if (userError || !user) throw new Error("Sessão inválida");
+
+                // 2️⃣ buscar nome na tabela morador
+                const { data, error } = await supabase
+                    .from("morador")
+                    .select("nome")
+                    .eq("id", user.id)
+                    .single();
+
+                if (error) throw error;
+
+                // atualizar estado
+                setNomeUser(data.nome);
+            } catch (err: any) {
+                console.error("Erro ao buscar nome:", err.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        fetchUserName();
+    }, []);
+
+    // ====================== ANÚNCIOS EXEMPLO ======================
     const anuncios = [
         {
             id: 1,
@@ -38,12 +72,23 @@ export default function HomeScreen() {
         },
     ];
 
+    // ====================== INTERFACE ======================
+    if (loading) {
+        return (
+            <View className="flex-1 justify-center items-center bg-white">
+                <ActivityIndicator size="large" color="#3b82f6" />
+                <Text className="mt-4 text-gray-500">A carregar...</Text>
+            </View>
+        );
+    }
+
     return (
         <ScrollView className="flex-1 bg-white">
             {/* Saudação abaixo do header */}
             <View className="w-full py-8 px-6">
                 <Text className="text-3xl font-extrabold text-blue-500 mb-1">
-                    Bem-vindo(a), {usuario}
+                    {/* se não encontrar nome, mostra "Utilizador" */}
+                    Bem-vindo(a), {nomeUser || "Utilizador"}
                 </Text>
                 <Text className="text-xl font-medium text-gray-500">
                     O teu condomínio em um lugar só

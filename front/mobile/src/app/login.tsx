@@ -6,9 +6,10 @@ import {
     TouchableOpacity,
     ImageBackground,
     KeyboardAvoidingView,
-    Platform,
+    Platform, Alert,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
+import { supabase } from "../api/client";
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -17,11 +18,50 @@ export default function LoginScreen() {
 
     // ====================== acção pra clicar ======================
 
-    const handleLogin = () => {
-        // ⚠️ Aqui depois colocas a lógica real de login (API / Auth)
-        // Por enquanto só redireciona:
-        router.push("/resetPassword"); // próxima tela (para trocar a senha)
+
+
+    const handleLogin = async () => {
+        try {
+            // login com Supabase
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (error) {
+                Alert.alert("Erro no login", error.message);
+                return;
+            }
+
+            const user = data.user;
+            if (!user) {
+                Alert.alert("Erro", "Não foi possível obter utilizador.");
+                return;
+            }
+
+            // buscar flag must_reset_password na tabela morador
+            const { data: morador, error: errMorador } = await supabase
+                .from("morador")
+                .select("must_reset_password")
+                .eq("id", user.id)
+                .single();
+
+            if (errMorador) {
+                Alert.alert("Erro", "Falha ao verificar estado da conta.");
+                return;
+            }
+
+            // verificar se precisa redefinir senha
+            if (morador?.must_reset_password) {
+                router.push("/resetPassword");
+            } else {
+                router.push("/(tabs)");
+            }
+        } catch (err) {
+            Alert.alert("Erro", "Falha inesperada no login.");
+        }
     };
+
 
     return (
         <>
