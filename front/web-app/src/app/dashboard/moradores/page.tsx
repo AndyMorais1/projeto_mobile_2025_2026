@@ -1,261 +1,212 @@
 "use client";
 
 import * as React from "react";
-import { Button } from "@/components/ui/button";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { toast } from "sonner";
+import { MoradorCard } from "@/components/myComponents/MoradorCard";
+import type { Morador } from "@/components/myComponents/MoradorCard";
+import { CreateMoradorDialog } from "@/components/myComponents/CreateMoradorDialog";
 import { supabase } from "@/api/Client";
-import { Loader2, Building2, Plus, Trash2, Phone, User } from "lucide-react";
+import { useCondominium } from "@/context/CondominiumProvider";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { RefreshCcw } from "lucide-react";
 
-type TipoCondominio = "horizontal" | "vertical" | "misto";
+export default function UsersPage() {
+  const { selected } = useCondominium();
+  const [moradores, setMoradores] = React.useState<Morador[]>([]);
+  const [carregar, setCarregar] = React.useState(true);
+  const [erro, setErro] = React.useState<string | null>(null);
 
-interface Contato {
-    telefone: string;
-    entidade: string;
-}
+  // 🔎 Busca
+  const [busca, setBusca] = React.useState("");
+  const [buscaDebounced, setBuscaDebounced] = React.useState("");
+  React.useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(busca.trim()), 400);
+    return () => clearTimeout(t);
+  }, [busca]);
 
-export function CreateCondominioDialog({
-                                           onCreated,
-                                       }: {
-    onCreated?: () => void;
-}) {
-    const [open, setOpen] = React.useState(false);
-    const [loading, setLoading] = React.useState(false);
+  const carregarMoradores = React.useCallback(async () => {
+    if (!selected) {
+      setMoradores([]);
+      setCarregar(false);
+      return;
+    }
 
-    const [nome, setNome] = React.useState("");
-    const [endereco, setEndereco] = React.useState("");
-    const [tipo, setTipo] = React.useState<TipoCondominio>("horizontal");
+    setCarregar(true);
+    setErro(null);
 
-    const [contatos, setContatos] = React.useState<Contato[]>([
-        { telefone: "", entidade: "" },
-    ]);
+    try {
+      // Base da query
+      let query = supabase
+        .from("morador")
+        .select(
+          `
+          id, nome, email, telefone, bi, estado_utilizador, foto, created_at, updated_at,
+          propriedade!inner(
+            id,
+            condominio_id,
+            nome_propriedade,
+            condominio:condominio_id (
+              id,
+              nome
+            )
+          )
+        `
+        )
+        .eq("propriedade.condominio_id", selected.id)
+        .order("created_at", { ascending: false });
 
-    const resetForm = () => {
-        setNome("");
-        setEndereco("");
-        setTipo("horizontal");
-        setContatos([{ telefone: "", entidade: "" }]);
+      // Filtro de busca (nome OU email)
+      if (buscaDebounced) {
+        // Nota: usa OR sobre colunas da tabela morador
+        query = query.or(
+          `nome.ilike.%${buscaDebounced}%,email.ilike.%${buscaDebounced}%`
+        );
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Deduplica moradores e escolhe a propriedade do condomínio selecionado
+      const seen = new Set<string>();
+      const unique: Morador[] = (data as any[]).reduce((acc, row) => {
+        if (seen.has(row.id)) return acc;
+        seen.add(row.id);
+
+        const propsArr = Array.isArray(row.propriedade)
+          ? row.propriedade
+          : [row.propriedade].filter(Boolean);
+        const prop =
+          propsArr.find(
+            (p: any) =>
+              p?.condominio_id === selected.id ||
+              p?.condominio?.id === selected.id
+          ) ?? propsArr[0];
+
+        const condominioNome = prop?.condominio?.nome ?? selected.nome ?? null;
+        const propLabel = prop?.nome_propriedade ?? null;
+
+        acc.push({
+          id: row.id,
+          nome: row.nome,
+          email: row.email,
+          telefone: row.telefone ?? "",
+          bi: row.bi ?? "",
+          estado_utilizador: row.estado_utilizador,
+          foto: row.foto ?? "",
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          condominio: condominioNome,
+          propriedade: propLabel,
+        } as Morador);
+
+        return acc;
+      }, [] as Morador[]);
+
+      setMoradores(unique);
+    } catch (e: any) {
+      setErro(e?.message || "Erro ao carregar moradores.");
+      setMoradores([]);
+    } finally {
+      setCarregar(false);
+    }
+  }, [selected, buscaDebounced]);
+
+  React.useEffect(() => {
+    carregarMoradores();
+  }, [carregarMoradores]);
+
+  React.useEffect(() => {
+    if (!selected) return;
+    const channel = supabase
+      .channel("moradores-por-condominio-1n")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "morador" },
+        () => carregarMoradores()
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "propriedade",
+          filter: `condominio_id=eq.${selected.id}`,
+        },
+        () => carregarMoradores()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
+  }, [selected, carregarMoradores]);
 
-    function addContato() {
-        setContatos([...contatos, { telefone: "", entidade: "" }]);
-    }
+  function handleRefresh() {
+    carregarMoradores();
+  }
 
-    function removeContato(index: number) {
-        setContatos(contatos.filter((_, i) => i !== index));
-    }
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-xl font-semibold">
+          {selected ? `Moradores — ${selected.nome}` : "Moradores"}
+        </h2>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <Input
+            placeholder="Buscar por nome ou email..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="sm:w-80"
+          />
+          <Button
+            variant="outline"
+            onClick={() => {
+              setBusca("");
+              setBuscaDebounced("");
+              carregarMoradores();
+            }}
+            className="gap-2"
+          >
+            <RefreshCcw className="h-4 w-4" />
+            Limpar
+          </Button>
+          <CreateMoradorDialog onCreated={carregarMoradores} />
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            className="gap-2"
+            title="Atualizar lista"
+          >
+            <RefreshCcw className="h-4 w-4" />
+            Atualizar
+          </Button>
+        </div>
+      </div>
 
-    function updateContato(index: number, field: keyof Contato, value: string) {
-        const updated = [...contatos];
-        updated[index][field] = value;
-        setContatos(updated);
-    }
+      {erro ? (
+        <div className="rounded-xl border p-4 text-sm text-destructive">
+          Erro a carregar: {erro}
+        </div>
+      ) : null}
 
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault();
-        if (!nome || !endereco || !tipo) {
-            toast.error("Preencha todos os campos obrigatórios");
-            return;
-        }
+      {!carregar && moradores.length === 0 ? (
+        <h1 className="text-center text-muted-foreground">
+          {selected
+            ? "Nenhum morador encontrado neste condomínio."
+            : "Selecione um condomínio acima para ver os moradores."}
+        </h1>
+      ) : null}
 
-        try {
-            setLoading(true);
-
-            // 1️⃣ cria o condomínio
-            const { data, error } = await supabase
-                .from("condominio")
-                .insert({ nome, endereco, tipo_condominio: tipo })
-                .select("id")
-                .single();
-
-            if (error) throw error;
-            const condominioId = data.id;
-
-            // 2️⃣ cria os contatos (se houver)
-            const contatosValidos = contatos.filter(
-                (c) => c.telefone.trim() && c.entidade.trim()
-            );
-
-            if (contatosValidos.length > 0) {
-                const { error: contatosErr } = await supabase
-                    .from("contato_condominio")
-                    .insert(
-                        contatosValidos.map((c) => ({
-                            condominio_id: condominioId,
-                            telefone: c.telefone,
-                            entidade: c.entidade,
-                        }))
-                    );
-                if (contatosErr) throw contatosErr;
-            }
-
-            toast.success("Condomínio criado com sucesso!");
-            resetForm();
-            setOpen(false);
-            onCreated?.();
-        } catch (err: any) {
-            console.error(err);
-            toast.error(err.message || "Falha ao criar condomínio");
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button>
-                    <Plus className="mr-2 h-4 w-4" /> Novo condomínio
-                </Button>
-            </DialogTrigger>
-
-            <DialogContent className="sm:max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <Building2 className="h-5 w-5 text-primary" /> Criar Condomínio
-                    </DialogTitle>
-                    <DialogDescription>
-                        Preencha os campos abaixo para adicionar um novo condomínio e seus
-                        contactos.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Campos principais */}
-                    <div className="grid gap-3">
-                        <Label htmlFor="nome">Nome</Label>
-                        <Input
-                            id="nome"
-                            placeholder="Ex: Condomínio Jardim das Flores"
-                            value={nome}
-                            onChange={(e) => setNome(e.target.value)}
-                            required
-                        />
-                    </div>
-
-                    <div className="grid gap-3">
-                        <Label htmlFor="endereco">Endereço</Label>
-                        <Textarea
-                            id="endereco"
-                            placeholder="Rua, número, bairro, cidade..."
-                            value={endereco}
-                            onChange={(e) => setEndereco(e.target.value)}
-                            required
-                        />
-                    </div>
-
-                    <div className="grid gap-3">
-                        <Label htmlFor="tipo">Tipo de condomínio</Label>
-                        <Select value={tipo} onValueChange={(v: TipoCondominio) => setTipo(v)}>
-                            <SelectTrigger id="tipo">
-                                <SelectValue placeholder="Selecione o tipo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="horizontal">Horizontal</SelectItem>
-                                <SelectItem value="vertical">Vertical</SelectItem>
-                                <SelectItem value="misto">Misto</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Contatos */}
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <Label>Contactos</Label>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={addContato}
-                            >
-                                <Plus className="h-4 w-4 mr-1" /> Adicionar
-                            </Button>
-                        </div>
-
-                        {contatos.map((c, i) => (
-                            <div
-                                key={i}
-                                className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end border rounded-xl p-3"
-                            >
-                                <div className="grid gap-2">
-                                    <Label className="flex items-center gap-1">
-                                        <Phone className="size-3" /> Telefone
-                                    </Label>
-                                    <Input
-                                        placeholder="Ex: 912345678"
-                                        value={c.telefone}
-                                        onChange={(e) =>
-                                            updateContato(i, "telefone", e.target.value)
-                                        }
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label className="flex items-center gap-1">
-                                        <User className="size-3" /> Entidade
-                                    </Label>
-                                    <Input
-                                        placeholder="Ex: Síndico, Porteiro, Empresa de limpeza"
-                                        value={c.entidade}
-                                        onChange={(e) =>
-                                            updateContato(i, "entidade", e.target.value)
-                                        }
-                                    />
-                                </div>
-                                <div className="flex justify-end">
-                                    {contatos.length > 1 && (
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => removeContato(i)}
-                                        >
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Footer */}
-                    <DialogFooter className="mt-6 flex justify-end gap-2">
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => setOpen(false)}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button type="submit" disabled={loading}>
-                            {loading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Criando...
-                                </>
-                            ) : (
-                                "Criar"
-                            )}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2">
+        {carregar
+          ? Array.from({ length: 2 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-44 animate-pulse rounded-2xl border bg-muted/30"
+              />
+            ))
+          : moradores.map((m) => <MoradorCard key={m.id} morador={m} />)}
+      </div>
+    </div>
+  );
 }
