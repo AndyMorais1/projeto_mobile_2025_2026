@@ -1,13 +1,19 @@
 "use client";
 
-import React from "react";
+import * as React from "react";
 import { supabase } from "@/api/Client";
 import { useCondominium } from "@/context/CondominiumProvider";
-import { InfoCard, Info } from "@/components/myComponents/InfoCard";
-import { Loader2, RefreshCcw } from "lucide-react";
+import { InfoCard, type Info } from "@/components/myComponents/InfoCard";
+import { Loader2, RefreshCcw, Trash2 } from "lucide-react";
 import { CreateInfoDialog } from "@/components/myComponents/CreateInfoDialog";
+import { EditInfoDialog } from "@/components/myComponents/EditInfoDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 export default function InfoPage() {
   const { selected } = useCondominium();
@@ -15,6 +21,15 @@ export default function InfoPage() {
   const [infos, setInfos] = React.useState<Info[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // EDIT dialog
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<Info | null>(null);
+
+  // DELETE dialog
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteItem, setDeleteItem] = React.useState<Info | null>(null);
 
   // 🔎 Busca por título
   const [q, setQ] = React.useState("");
@@ -54,12 +69,12 @@ export default function InfoPage() {
     setLoading(false);
   }, [selected?.id, qDebounced]);
 
-  // ---- Fetch inicial + quando muda o condomínio ou a busca ----
+  // Fetch inicial + mudanças
   React.useEffect(() => {
     fetchInfos();
   }, [fetchInfos]);
 
-  // ---- Realtime: aplica ao conjunto filtrado também ----
+  // Realtime
   React.useEffect(() => {
     if (!selected?.id) return;
 
@@ -74,32 +89,23 @@ export default function InfoPage() {
           filter: `condominio_id=eq.${selected.id}`,
         },
         (payload) => {
-          // Se existir filtro de busca, para manter coerência, refaça o fetch:
           if (qDebounced) {
+            // com filtro, mantém consistência refazendo busca
             fetchInfos();
             return;
           }
-
-          // Sem filtro -> atualiza localmente
           switch (payload.eventType) {
             case "INSERT": {
               const row = payload.new as Info;
-              setInfos((curr) =>
-                curr.some((i) => i.id === row.id) ? curr : [row, ...curr]
-              );
+              setInfos((curr) => (curr.some((i) => i.id === row.id) ? curr : [row, ...curr]));
               break;
             }
             case "UPDATE": {
               const row = payload.new as Info;
               setInfos((curr) => {
-                const next = curr.map((i) =>
-                  i.id === row.id ? (row as Info) : i
-                );
-                // mantém created_at desc (caso haja alteração no campo)
+                const next = curr.map((i) => (i.id === row.id ? row : i));
                 next.sort(
-                  (a, b) =>
-                    +new Date(b.created_at as any) -
-                    +new Date(a.created_at as any)
+                  (a, b) => +new Date(b.created_at as any) - +new Date(a.created_at as any)
                 );
                 return next;
               });
@@ -120,25 +126,40 @@ export default function InfoPage() {
     };
   }, [selected?.id, qDebounced, fetchInfos]);
 
-  // ---- Handlers ----
-  const handleEdit = (info: Info) => {
-    console.log("Editar info:", info);
-    // TODO: abrir um Dialog para editar a info
-  };
+  // Handlers
+  function handleEdit(info: Info) {
+    setEditing(info);
+    setEditOpen(true);
+  }
 
-  const handleDelete = async (info: Info) => {
-    if (!confirm(`Apagar "${info.titulo}"?`)) return;
-    const { error } = await supabase.from("info").delete().eq("id", info.id);
-    if (error) {
-      alert(`Erro ao apagar: ${error.message}`);
+  function askDelete(info: Info) {
+    setDeleteItem(info);
+    setConfirmOpen(true);
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteItem) return;
+    try {
+      setDeleting(true);
+      const { error } = await supabase.from("info").delete().eq("id", deleteItem.id);
+      if (error) throw new Error(error.message);
+
+      // otimista (realtime também remove)
+      setInfos((curr) => curr.filter((i) => i.id !== deleteItem.id));
+      toast.success("Informação apagada.");
+      setConfirmOpen(false);
+      setDeleteItem(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao apagar informação.");
+    } finally {
+      setDeleting(false);
     }
-    // Realtime tratará do estado.
-  };
+  }
 
-  const handleRefresh = () => {
+  function handleRefresh() {
     fetchInfos();
   }
-  // ---- UI ----
+
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6">
       {/* Cabeçalho */}
@@ -188,15 +209,14 @@ export default function InfoPage() {
         </p>
       ) : loading ? (
         <div className="flex justify-center items-center py-10 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mr-2" />A carregar
-          informações…
+          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+          A carregar informações…
         </div>
       ) : error ? (
         <div className="text-center text-destructive">{error}</div>
       ) : infos.length === 0 ? (
         <div className="text-center text-muted-foreground">
-          Nenhuma informação encontrada{" "}
-          {qDebounced ? "para esta busca." : "para este condomínio."}
+          Nenhuma informação encontrada {qDebounced ? "para esta busca." : "para este condomínio."}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -205,11 +225,53 @@ export default function InfoPage() {
               key={info.id}
               info={info}
               onEdit={handleEdit}
-              onDelete={handleDelete}
+              onDelete={askDelete}
             />
           ))}
         </div>
       )}
+
+      {/* Editar */}
+      {editing && (
+        <EditInfoDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          info={editing}
+          onSaved={(upd) => {
+            // atualiza localmente + faz um refresh para garantir coerência
+            setInfos((prev) => prev.map((i) => (i.id === editing.id ? { ...i, ...upd } as Info : i)));
+            fetchInfos();
+          }}
+        />
+      )}
+
+      {/* Confirmar apagar */}
+      <AlertDialog open={confirmOpen} onOpenChange={(v) => !deleting && setConfirmOpen(v)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar informação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é permanente. A informação "{deleteItem?.titulo}" será removida.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} disabled={deleting}>
+              {deleting ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Apagando…
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Confirmar
+                </span>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

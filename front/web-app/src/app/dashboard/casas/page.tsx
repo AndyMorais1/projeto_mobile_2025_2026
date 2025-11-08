@@ -4,11 +4,11 @@ import * as React from "react";
 import { supabase } from "@/api/Client";
 import { useCondominium } from "@/context/CondominiumProvider";
 import {
-  PropriedadeCard,
+  CasaCard,
   type Propriedade,
   type PropriedadeRelations,
-} from "@/components/myComponents/PropriedadeCard";
-import { CreatePropriedadeDialog } from "@/components/myComponents/CreatePropriedadeDialog";
+} from "@/components/myComponents/CasaCard";
+import { CreateCasaDialog } from "@/components/myComponents/CreateCasaDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RefreshCcw } from "lucide-react";
@@ -30,6 +30,53 @@ export default function HousesPage() {
     return () => clearTimeout(t);
   }, [busca]);
 
+  // ---- helpers ----
+  const rowToPropriedade = React.useCallback((p: any): Propriedade => {
+    return {
+      id: p.id,
+      condominio_id: p.condominio_id,
+      morador_id: p.morador_id,
+      tipo_propriedade: p.tipo_propriedade,
+      estado_propriedade: p.estado_propriedade,
+      rua: p.rua,
+      numero: p.numero,
+      andar: p.andar,
+      nome_propriedade: p.nome_propriedade ?? null,
+      tem_estacionamento: p.tem_estacionamento,
+      created_at: p.created_at,
+      updated_at: p.updated_at,
+    };
+  }, []);
+
+  const fetchRelationsFor = React.useCallback(
+    async (id: string): Promise<PropriedadeRelations> => {
+      const { data, error } = await supabase
+        .from("propriedade")
+        .select(
+          `id,
+           morador:morador_id (nome, email),
+           condominio:condominio_id (nome)`
+        )
+        .eq("id", id)
+        .single();
+
+      if (error || !data) return {};
+
+      const getNome = (rel: any) =>
+        Array.isArray(rel) ? rel[0]?.nome ?? null : rel?.nome ?? null;
+
+      const getEmail = (rel: any) =>
+        Array.isArray(rel) ? rel[0]?.email ?? null : rel?.email ?? null;
+
+      return {
+        condominio_nome: getNome(data?.condominio),
+        morador_nome: getNome(data?.morador),
+        morador_email: getEmail(data?.morador),
+      };
+    },
+    []
+  );
+  // ---- fetch inicial/refresh ----
   const carregarPropriedades = React.useCallback(async () => {
     if (!selected) {
       setPropriedades([]);
@@ -42,7 +89,6 @@ export default function HousesPage() {
     setErro(null);
 
     try {
-      // Base da query
       let query = supabase
         .from("propriedade")
         .select(
@@ -66,9 +112,7 @@ export default function HousesPage() {
         .eq("condominio_id", selected.id)
         .order("created_at", { ascending: false });
 
-      // Filtro de busca (morador.nome, morador.email, tipo_propriedade, nome_propriedade)
       if (buscaDebounced) {
-        // PostgREST permite filtrar por colunas de relações usando o alias do select
         query = query.or(
           [
             `morador.nome.ilike.%${buscaDebounced}%`,
@@ -82,29 +126,14 @@ export default function HousesPage() {
       const { data, error } = await query;
       if (error) throw error;
 
-      const list: Propriedade[] = (data ?? []).map((p: any) => ({
-        id: p.id,
-        condominio_id: p.condominio_id,
-        morador_id: p.morador_id,
-        tipo_propriedade: p.tipo_propriedade,
-        estado_propriedade: p.estado_propriedade,
-        rua: p.rua,
-        numero: p.numero,
-        andar: p.andar,
-        nome_propriedade: p.nome_propriedade ?? null,
-        tem_estacionamento: p.tem_estacionamento,
-        created_at: p.created_at,
-        updated_at: p.updated_at,
-      }));
-
+      const list: Propriedade[] = (data ?? []).map(rowToPropriedade);
       const rel: Record<string, PropriedadeRelations> = {};
       (data ?? []).forEach((p: any) => {
         rel[p.id] = {
           condominio_nome: p?.condominio?.nome ?? selected.nome ?? null,
           morador_nome: p?.morador?.nome ?? null,
-          // se o teu PropriedadeRelations tiver email, podes adicionar:
           morador_email: p?.morador?.email ?? null,
-        } as PropriedadeRelations;
+        };
       });
 
       setPropriedades(list);
@@ -116,34 +145,88 @@ export default function HousesPage() {
     } finally {
       setCarregar(false);
     }
-  }, [selected, buscaDebounced]);
+  }, [selected, buscaDebounced, rowToPropriedade]);
 
   React.useEffect(() => {
     carregarPropriedades();
   }, [carregarPropriedades]);
 
+  // ---- Realtime GLOBAL (sem filter); filtramos no cliente por condominio_id ----
   React.useEffect(() => {
     if (!selected) return;
 
     const channel = supabase
-      .channel("propriedades-por-condominio")
+      .channel("propriedade-realtime-global")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "propriedade",
-          filter: `condominio_id=eq.${selected.id}`,
-        },
-        () => carregarPropriedades()
+        { event: "*", schema: "public", table: "propriedade" },
+        async (payload) => {
+          const rowNew: any = payload.new ?? null;
+          const rowOld: any = payload.old ?? null;
+
+          const condominioId =
+            rowNew?.condominio_id ?? rowOld?.condominio_id ?? null;
+          if (!condominioId || condominioId !== selected.id) return;
+
+          // Com busca ativa, refetch mantém a coerência do filtro
+          if (buscaDebounced) {
+            await carregarPropriedades();
+            return;
+          }
+
+          if (payload.eventType === "INSERT" && rowNew) {
+            setPropriedades((prev) =>
+              prev.some((p) => p.id === rowNew.id)
+                ? prev
+                : [rowToPropriedade(rowNew), ...prev]
+            );
+
+            const rel = await fetchRelationsFor(rowNew.id);
+            setRelationsById((prev) => ({ ...prev, [rowNew.id]: rel }));
+          }
+
+          if (payload.eventType === "UPDATE" && rowNew) {
+            const updated = rowToPropriedade(rowNew);
+
+            setPropriedades((prev) =>
+              prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+            );
+
+            const rel = await fetchRelationsFor(updated.id);
+            setRelationsById((prev) => ({ ...prev, [updated.id]: rel }));
+          }
+
+          if (payload.eventType === "DELETE" && rowOld) {
+            const idRemovido = rowOld.id as string;
+            setPropriedades((prev) => prev.filter((p) => p.id !== idRemovido));
+            setRelationsById((prev) => {
+              const { [idRemovido]: _omit, ...rest } = prev;
+              return rest;
+            });
+          }
+        }
       )
       .subscribe();
-
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selected, carregarPropriedades]);
+  }, [selected, buscaDebounced, carregarPropriedades, rowToPropriedade, fetchRelationsFor]);
+
+  // (Opcional) remoção otimista se quiser disparar um evento no delete do card
+  React.useEffect(() => {
+    function onDeleted(e: any) {
+      const id = e?.detail?.id;
+      if (!id) return;
+      setPropriedades((prev) => prev.filter((p) => p.id !== id));
+      setRelationsById((prev) => {
+        const { [id]: _omit, ...rest } = prev;
+        return rest;
+      });
+    }
+    window.addEventListener("propriedade:deleted", onDeleted);
+    return () => window.removeEventListener("propriedade:deleted", onDeleted);
+  }, []);
 
   const handleRefresh = () => {
     carregarPropriedades();
@@ -153,15 +236,15 @@ export default function HousesPage() {
     <div className="mx-auto max-w-6xl space-y-6 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">
-          {selected ? `Propriedades — ${selected.nome}` : "Propriedades"}
+          {selected ? `Casas — ${selected.nome}` : "Casas"}
         </h2>
 
         <div className="flex w-full gap-2 sm:w-auto">
           <Input
-            placeholder="Buscar por morador (nome/email), tipo ou nome da propriedade…"
+            placeholder="Buscar por morador, tipo ou nome da propriedade…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            className="sm:w-[34rem]"
+            className="sm:w-80"
           />
           <Button
             variant="outline"
@@ -177,7 +260,7 @@ export default function HousesPage() {
             Limpar
           </Button>
 
-          <CreatePropriedadeDialog
+          <CreateCasaDialog
             presetCondominioId={selected?.id}
             onCreated={() => carregarPropriedades()}
           />
@@ -216,19 +299,10 @@ export default function HousesPage() {
               />
             ))
           : propriedades.map((p) => (
-              <PropriedadeCard
+              <CasaCard
                 key={p.id}
                 propriedade={p}
                 relations={relationsById[p.id]}
-                onEdit={() => {
-                  /* TODO */
-                }}
-                onDelete={() => {
-                  /* TODO */
-                }}
-                onPassarFatura={() => {
-                  /* TODO */
-                }}
               />
             ))}
       </div>

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Loader2, Plus, Home, MapPin, Hash, Layers, ParkingCircle } from "lucide-react";
 import { supabase } from "@/api/Client";
-
+import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
@@ -46,7 +46,7 @@ type Props = {
   presetCondominioId?: string; // pode vir preenchido, mas não bloqueia o select
 };
 
-export function CreatePropriedadeDialog({ onCreated, defaultOpen, presetCondominioId }: Props) {
+export function CreateCasaDialog({ onCreated, defaultOpen, presetCondominioId }: Props) {
   const [open, setOpen] = React.useState(!!defaultOpen);
 
   const [condominios, setCondominios] = React.useState<Condominio[]>([]);
@@ -162,8 +162,10 @@ export function CreatePropriedadeDialog({ onCreated, defaultOpen, presetCondomin
           tem_estacionamento: false,
         }));
       }, 500);
+      toast.success("Propriedade criada com sucesso.");
     } catch (err: any) {
       setErrorMsg(err?.message || "Erro ao criar propriedade.");
+      toast.error(err?.message || "Erro ao criar propriedade.");
     } finally {
       setSubmitting(false);
     }

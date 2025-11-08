@@ -3,7 +3,7 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/myComponents/AppSidebar";
 import { Header } from "@/components/myComponents/Header";
-import { CondominiumNavbar } from "@/components/myComponents/condominiumNavbar";
+import { CondominiumNavbar } from "@/components/myComponents/CondominiumNavbar";
 import { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { CondominiumProvider } from "@/context/CondominiumProvider";
@@ -17,7 +17,8 @@ export default function Layout({ children }: { children: ReactNode }) {
     pathname !== "/dashboard/profile" &&
     pathname !== "/dashboard/admins" &&
     pathname !== "/dashboard/condominios" &&
-    pathname !== "/dashboard/atividades";
+    pathname !== "/dashboard/atividades" &&
+    pathname !== "/dashboard/fornecedores";
 
   return (
     <CondominiumProvider>

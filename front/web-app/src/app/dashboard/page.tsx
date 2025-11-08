@@ -109,7 +109,7 @@ export default async function DashboardPage() {
         pendingUsers={pendingUsers}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="">
         {/* mantém espaço para outros cards futuros; por enquanto só a atividade */}
         <RecentActivity atividades={atividades} limit={7} />
       </div>

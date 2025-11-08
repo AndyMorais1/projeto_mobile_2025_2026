@@ -256,7 +256,7 @@ export function CreateAdminDialog({
               <SelectContent>
                 <SelectItem value="ativo">Ativo</SelectItem>
                 <SelectItem value="pendente">Pendente</SelectItem>
-                <SelectItem value="bloqueado">Bloqueado</SelectItem>
+                <SelectItem value="inativo">Inativo</SelectItem>
               </SelectContent>
             </Select>
           </div>
