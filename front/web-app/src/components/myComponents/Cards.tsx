@@ -72,7 +72,7 @@ export function Cards(initial: CardsProps) {
     { title: "Moradores", icon: User, number: data.moradores },
     { title: "Casas", icon: Home, number: data.casas },
     { title: "Condomínios", icon: Building2, number: data.condominios },
-    { title: "Pedidos", icon: NotebookPen, number: data.pedidos },
+    { title: "pedidos", icon: NotebookPen, number: data.pedidos },
   ];
 
   return (

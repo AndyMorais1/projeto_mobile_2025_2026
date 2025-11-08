@@ -3,7 +3,7 @@ import "../styles/global.css";
 import { View, Text, TouchableOpacity } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import { Header } from "@/src/components/header";
+import { Header } from "@/components/header";
 
 export default function RootLayout() {
   const router = useRouter();

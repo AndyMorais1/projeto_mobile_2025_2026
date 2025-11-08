@@ -8,7 +8,7 @@ const mapRouteToTitle: { [key: string]: string } = {
   "/dashboard/profile": "Perfil",
   "/dashboard/faturas": "Faturas",
   "/dashboard/informacoes": "Informações",
-  "/dashboard/pedidos": "Pedidos",
+  "/dashboard/pedidos": "pedidos",
   "/dashboard/casas": "Casas",
   "/dashboard/admins": "Admins",
   "/dashboard/condominios": "Condomínios",
