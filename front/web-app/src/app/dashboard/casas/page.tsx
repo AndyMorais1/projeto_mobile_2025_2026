@@ -11,6 +11,13 @@ import {
 import { CreateCasaDialog } from "@/components/myComponents/CreateCasaDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { RefreshCcw } from "lucide-react";
 
 export default function HousesPage() {
@@ -22,15 +29,17 @@ export default function HousesPage() {
   const [carregar, setCarregar] = React.useState(true);
   const [erro, setErro] = React.useState<string | null>(null);
 
-  // 🔎 Busca (morador.nome, morador.email, tipo_propriedade, nome_propriedade)
+  // 🔎 Busca
   const [busca, setBusca] = React.useState("");
   const [buscaDebounced, setBuscaDebounced] = React.useState("");
   React.useEffect(() => {
-    const t = setTimeout(() => setBuscaDebounced(busca.trim()), 400);
+    const t = setTimeout(() => setBuscaDebounced(busca.trim().toLowerCase()), 400);
     return () => clearTimeout(t);
   }, [busca]);
 
-  // ---- helpers ----
+  // 🎛️ Filtros adicionais
+  const [estadoFiltro, setEstadoFiltro] = React.useState("todos");
+
   const rowToPropriedade = React.useCallback((p: any): Propriedade => {
     return {
       id: p.id,
@@ -48,35 +57,6 @@ export default function HousesPage() {
     };
   }, []);
 
-  const fetchRelationsFor = React.useCallback(
-    async (id: string): Promise<PropriedadeRelations> => {
-      const { data, error } = await supabase
-        .from("propriedade")
-        .select(
-          `id,
-           morador:morador_id (nome, email),
-           condominio:condominio_id (nome)`
-        )
-        .eq("id", id)
-        .single();
-
-      if (error || !data) return {};
-
-      const getNome = (rel: any) =>
-        Array.isArray(rel) ? rel[0]?.nome ?? null : rel?.nome ?? null;
-
-      const getEmail = (rel: any) =>
-        Array.isArray(rel) ? rel[0]?.email ?? null : rel?.email ?? null;
-
-      return {
-        condominio_nome: getNome(data?.condominio),
-        morador_nome: getNome(data?.morador),
-        morador_email: getEmail(data?.morador),
-      };
-    },
-    []
-  );
-  // ---- fetch inicial/refresh ----
   const carregarPropriedades = React.useCallback(async () => {
     if (!selected) {
       setPropriedades([]);
@@ -112,23 +92,35 @@ export default function HousesPage() {
         .eq("condominio_id", selected.id)
         .order("created_at", { ascending: false });
 
-      if (buscaDebounced) {
-        query = query.or(
-          [
-            `morador.nome.ilike.%${buscaDebounced}%`,
-            `morador.email.ilike.%${buscaDebounced}%`,
-            `tipo_propriedade.ilike.%${buscaDebounced}%`,
-            `nome_propriedade.ilike.%${buscaDebounced}%`,
-          ].join(",")
-        );
-      }
-
       const { data, error } = await query;
       if (error) throw error;
 
-      const list: Propriedade[] = (data ?? []).map(rowToPropriedade);
+      let list: any[] = data ?? [];
+
+      // 🔍 Filtro manual (busca + estado + estacionamento)
+      list = list.filter((p) => {
+        const moradorNome = p.morador?.nome?.toLowerCase() ?? "";
+        const moradorEmail = p.morador?.email?.toLowerCase() ?? "";
+        const tipo = p.tipo_propriedade?.toLowerCase() ?? "";
+        const nome = p.nome_propriedade?.toLowerCase() ?? "";
+        const estado = p.estado_propriedade?.toLowerCase() ?? "";
+
+        const matchBusca =
+          !buscaDebounced ||
+          moradorNome.includes(buscaDebounced) ||
+          moradorEmail.includes(buscaDebounced) ||
+          tipo.includes(buscaDebounced) ||
+          nome.includes(buscaDebounced);
+
+        const matchEstado =
+          estadoFiltro === "todos" || estado === estadoFiltro;
+
+        return matchBusca && matchEstado ;
+      });
+
+      const listProps: Propriedade[] = list.map(rowToPropriedade);
       const rel: Record<string, PropriedadeRelations> = {};
-      (data ?? []).forEach((p: any) => {
+      list.forEach((p) => {
         rel[p.id] = {
           condominio_nome: p?.condominio?.nome ?? selected.nome ?? null,
           morador_nome: p?.morador?.nome ?? null,
@@ -136,101 +128,41 @@ export default function HousesPage() {
         };
       });
 
-      setPropriedades(list);
+      setPropriedades(listProps);
       setRelationsById(rel);
     } catch (e: any) {
+      console.error(e);
       setErro(e?.message || "Erro ao carregar propriedades.");
       setPropriedades([]);
       setRelationsById({});
     } finally {
       setCarregar(false);
     }
-  }, [selected, buscaDebounced, rowToPropriedade]);
+  }, [selected, buscaDebounced, estadoFiltro,  rowToPropriedade]);
 
   React.useEffect(() => {
     carregarPropriedades();
   }, [carregarPropriedades]);
 
-  // ---- Realtime GLOBAL (sem filter); filtramos no cliente por condominio_id ----
+  // 🔁 Realtime
   React.useEffect(() => {
     if (!selected) return;
-
     const channel = supabase
       .channel("propriedade-realtime-global")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "propriedade" },
-        async (payload) => {
-          const rowNew: any = payload.new ?? null;
-          const rowOld: any = payload.old ?? null;
-
-          const condominioId =
-            rowNew?.condominio_id ?? rowOld?.condominio_id ?? null;
-          if (!condominioId || condominioId !== selected.id) return;
-
-          // Com busca ativa, refetch mantém a coerência do filtro
-          if (buscaDebounced) {
-            await carregarPropriedades();
-            return;
-          }
-
-          if (payload.eventType === "INSERT" && rowNew) {
-            setPropriedades((prev) =>
-              prev.some((p) => p.id === rowNew.id)
-                ? prev
-                : [rowToPropriedade(rowNew), ...prev]
-            );
-
-            const rel = await fetchRelationsFor(rowNew.id);
-            setRelationsById((prev) => ({ ...prev, [rowNew.id]: rel }));
-          }
-
-          if (payload.eventType === "UPDATE" && rowNew) {
-            const updated = rowToPropriedade(rowNew);
-
-            setPropriedades((prev) =>
-              prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
-            );
-
-            const rel = await fetchRelationsFor(updated.id);
-            setRelationsById((prev) => ({ ...prev, [updated.id]: rel }));
-          }
-
-          if (payload.eventType === "DELETE" && rowOld) {
-            const idRemovido = rowOld.id as string;
-            setPropriedades((prev) => prev.filter((p) => p.id !== idRemovido));
-            setRelationsById((prev) => {
-              const { [idRemovido]: _omit, ...rest } = prev;
-              return rest;
-            });
-          }
+        () => {
+          void carregarPropriedades();
         }
       )
       .subscribe();
-
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
-  }, [selected, buscaDebounced, carregarPropriedades, rowToPropriedade, fetchRelationsFor]);
+  }, [selected, carregarPropriedades]);
 
-  // (Opcional) remoção otimista se quiser disparar um evento no delete do card
-  React.useEffect(() => {
-    function onDeleted(e: any) {
-      const id = e?.detail?.id;
-      if (!id) return;
-      setPropriedades((prev) => prev.filter((p) => p.id !== id));
-      setRelationsById((prev) => {
-        const { [id]: _omit, ...rest } = prev;
-        return rest;
-      });
-    }
-    window.addEventListener("propriedade:deleted", onDeleted);
-    return () => window.removeEventListener("propriedade:deleted", onDeleted);
-  }, []);
-
-  const handleRefresh = () => {
-    carregarPropriedades();
-  };
+  const handleRefresh = () => carregarPropriedades();
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4">
@@ -239,22 +171,42 @@ export default function HousesPage() {
           {selected ? `Casas — ${selected.nome}` : "Casas"}
         </h2>
 
-        <div className="flex w-full gap-2 sm:w-auto">
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          {/* 🔍 Busca */}
           <Input
             placeholder="Buscar por morador, tipo ou nome da propriedade…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            className="sm:w-80"
+            className="sm:w-72"
           />
+
+          {/* 🎛️ Filtro estado */}
+          <Select
+            value={estadoFiltro}
+            onValueChange={setEstadoFiltro}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="disponivel">Disponível</SelectItem>
+              <SelectItem value="ocupada">Ocupada</SelectItem>
+              <SelectItem value="manutencao">Manutenção</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* 🔁 Botões */}
           <Button
             variant="outline"
-            className="gap-2"
             onClick={() => {
               setBusca("");
               setBuscaDebounced("");
+              setEstadoFiltro("todos");
               carregarPropriedades();
             }}
-            title="Limpar busca"
+            className="gap-2"
+            title="Limpar filtros"
           >
             <RefreshCcw className="h-4 w-4" />
             Limpar
@@ -276,19 +228,19 @@ export default function HousesPage() {
         </div>
       </div>
 
-      {erro ? (
+      {erro && (
         <div className="rounded-xl border p-4 text-sm text-destructive">
           Erro a carregar: {erro}
         </div>
-      ) : null}
+      )}
 
-      {!carregar && propriedades.length === 0 ? (
+      {!carregar && propriedades.length === 0 && (
         <h1 className="text-center text-muted-foreground">
           {selected
-            ? "Nenhuma propriedade encontrada."
-            : "Selecione um condomínio acima para ver as propriedades."}
+            ? "Nenhuma propriedade encontrada com esses filtros."
+            : "Selecione um condomínio para ver as propriedades."}
         </h1>
-      ) : null}
+      )}
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2">
         {carregar
