@@ -13,19 +13,20 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-  import { Button } from "@/components/ui/button";
-  import { Input } from "@/components/ui/input";
-  import { Label } from "@/components/ui/label";
-  import { Textarea } from "@/components/ui/textarea";
-  import {
-    Select,
-    SelectTrigger,
-    SelectContent,
-    SelectItem,
-    SelectValue,
-  } from "@/components/ui/select";
-  import { Separator } from "@/components/ui/separator";
-  import { Loader2, Image as ImageIcon, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Loader2, Image as ImageIcon, Plus, Upload } from "lucide-react";
+import { toast } from "sonner";
 
 type InfoInsert = {
   titulo: string;
@@ -42,7 +43,6 @@ type Props = {
   triggerLabel?: string;
 };
 
-/** opções (ajuste conforme seus enums do Postgres) */
 const TIPO_OPCOES = ["aviso", "noticias", "outro"] as const;
 const ESTADO_OPCOES = ["ativo", "inativo"] as const;
 
@@ -63,70 +63,86 @@ export function CreateInfoDialog({ defaultOpen, onCreated, triggerLabel = "Nova 
     estado_informacao: ESTADO_OPCOES[0],
   });
 
-  // upload
+  // Upload de foto
   const [fotoPreview, setFotoPreview] = React.useState<string | null>(null);
   const [fotoUploading, setFotoUploading] = React.useState(false);
   const [fotoProgress, setFotoProgress] = React.useState(0);
+
+  // Upload de anexo
+  const [anexo, setAnexo] = React.useState<string | null>(null);
+  const [anexoPreview, setAnexoPreview] = React.useState<string | null>(null);
+  const [anexoManual, setAnexoManual] = React.useState("");
+  const [anexoUploading, setAnexoUploading] = React.useState(false);
+  const [anexoProgress, setAnexoProgress] = React.useState(0);
 
   function update<K extends keyof InfoInsert>(key: K, val: InfoInsert[K]) {
     setForm((f) => ({ ...f, [key]: val }));
   }
 
-  async function uploadFotoToInfoFotos(file: File): Promise<string> {
-    setFotoUploading(true);
-    setFotoProgress(0);
-
-    if (!file.type.startsWith("image/")) throw new Error("Envie uma imagem válida.");
-    if (file.size > 8 * 1024 * 1024) throw new Error("Imagem deve ter até 8MB.");
-
-    // prefixo por usuário para compatibilizar com policies por pasta
+  async function uploadToBucket(bucket: string, file: File): Promise<string> {
     const { data: u } = await supabase.auth.getUser();
     const userId = u.user?.id ?? "anonymous";
-
-    const ext = file.name.split(".").pop() || "jpg";
+    const ext = file.name.split(".").pop() || "dat";
     const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const path = `${userId}/${unique}.${ext}`;
 
-    // onUploadProgress pode não estar tipado em algumas versões
-    const { error } = await (supabase.storage
-      .from("info_fotos")
-      .upload(path, file, {
-        contentType: file.type,
-        cacheControl: "3600",
-        upsert: false,
-        // @ts-ignore
-        onUploadProgress: (ev: ProgressEvent) => {
-          if (ev.lengthComputable) {
-            setFotoProgress(Math.round((ev.loaded / ev.total) * 100));
-          }
-        },
-      }) as any);
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, { contentType: file.type, upsert: false });
 
-    if (error) {
-      setFotoUploading(false);
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
-    // Se o bucket for público:
-    const { data } = supabase.storage.from("info_fotos").getPublicUrl(path);
-    setFotoUploading(false);
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
+  }
+
+  async function uploadFotoToInfoFotos(file: File): Promise<string> {
+    if (!file.type.startsWith("image/")) throw new Error("Envie uma imagem válida.");
+    if (file.size > 8 * 1024 * 1024) throw new Error("Imagem deve ter até 8MB.");
+    setFotoUploading(true);
+    const url = await uploadToBucket("info_fotos", file);
+    setFotoUploading(false);
+    return url;
+  }
+
+  async function uploadAnexo(file: File): Promise<string> {
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf")
+      throw new Error("Envie apenas imagens ou PDFs.");
+    if (file.size > 10 * 1024 * 1024) throw new Error("Arquivo deve ter até 10MB.");
+    setAnexoUploading(true);
+    const url = await uploadToBucket("info_anexos", file);
+    setAnexoUploading(false);
+    return url;
   }
 
   async function onFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-
     setErrorMsg(null);
     setFotoPreview(URL.createObjectURL(f));
-
     try {
       const url = await uploadFotoToInfoFotos(f);
       update("foto", url);
     } catch (err: any) {
-      setErrorMsg(err?.message || "Falha ao subir a imagem.");
+      setErrorMsg(err?.message || "Falha ao subir imagem.");
       setFotoPreview(null);
-      update("foto", "");
+    }
+  }
+
+  async function onAnexoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setErrorMsg(null);
+    setAnexoPreview(f.type === "application/pdf" ? "pdf" : URL.createObjectURL(f));
+    try {
+      const url = await uploadAnexo(f);
+      setAnexo(url);
+      setAnexoManual(url);
+      toast.success("Anexo enviado com sucesso!");
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Falha ao enviar anexo.");
+      setAnexo(null);
+      setAnexoPreview(null);
     }
   }
 
@@ -135,52 +151,28 @@ export function CreateInfoDialog({ defaultOpen, onCreated, triggerLabel = "Nova 
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    if (!selected?.id) {
-      setErrorMsg("Selecione um condomínio.");
-      return;
-    }
-    if (!form.titulo.trim()) {
-      setErrorMsg("Informe o título.");
-      return;
-    }
-    if (!form.tipo_informacao || !form.estado_informacao) {
-      setErrorMsg("Selecione tipo e estado.");
-      return;
-    }
-    if (fotoUploading) {
-      setErrorMsg("Aguarde a imagem terminar de enviar.");
-      return;
-    }
+    if (!selected?.id) return setErrorMsg("Selecione um condomínio.");
+    if (!form.titulo.trim()) return setErrorMsg("Informe o título.");
+    if (fotoUploading || anexoUploading) return setErrorMsg("Aguarde o upload terminar.");
 
     setSubmitting(true);
     try {
-      // id do admin autenticado (assumindo que auth.uid = admin.id)
-      const { data: u, error: uErr } = await supabase.auth.getUser();
-      if (uErr || !u.user) throw new Error("Sessão inválida.");
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("Sessão inválida.");
 
       const payload = {
-        titulo: form.titulo.trim(),
-        descricao: form.descricao?.trim() || null,
-        foto: form.foto?.trim() || null,
-        anexo: form.anexo?.trim() || null,
-        tipo_informacao: form.tipo_informacao,
-        estado_informacao: form.estado_informacao,
+        ...form,
+        anexo: anexoManual?.trim() || anexo?.trim() || null,
         admin_id: u.user.id,
-        condominio_id: selected.id, // <- vem do contexto
+        condominio_id: selected.id,
       };
 
-      const { data, error } = await supabase
-        .from("info")
-        .insert(payload)
-        .select("id")
-        .single();
-
+      const { data, error } = await supabase.from("info").insert(payload).select("id").single();
       if (error) throw new Error(error.message);
 
-      setSuccessMsg("Informação criada com sucesso!");
-      onCreated?.({ id: data!.id, ...form, condominio_id: selected.id });
+      toast.success("Informação criada!");
+      onCreated?.({ id: data.id, ...form, condominio_id: selected.id });
 
-      // reset leve e fechar
       setTimeout(() => {
         setOpen(false);
         setForm({
@@ -192,7 +184,7 @@ export function CreateInfoDialog({ defaultOpen, onCreated, triggerLabel = "Nova 
           estado_informacao: ESTADO_OPCOES[0],
         });
         setFotoPreview(null);
-        setFotoProgress(0);
+        setAnexoPreview(null);
         setSuccessMsg(null);
       }, 400);
     } catch (err: any) {
@@ -208,143 +200,95 @@ export function CreateInfoDialog({ defaultOpen, onCreated, triggerLabel = "Nova 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          {triggerLabel}
+          <Plus className="mr-2 h-4 w-4" /> {triggerLabel}
         </Button>
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Criar informação</DialogTitle>
-          <DialogDescription>
-            Preencha os dados abaixo para criar uma nova informação para o condomínio selecionado.
-          </DialogDescription>
+          <DialogDescription>Preencha os dados abaixo.</DialogDescription>
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
-          {/* Condomínio (somente leitura, vindo do contexto) */}
           <div className="grid gap-2">
-            <Label htmlFor="condominio">Condomínio</Label>
-            <Input
-              id="condominio"
-              value={condominioName}
-              readOnly
-              placeholder="Selecione um condomínio"
-              className="opacity-90"
-            />
-            {!selected?.id && (
-              <p className="text-xs text-muted-foreground">
-                Nenhum condomínio selecionado. Escolha um para continuar.
-              </p>
-            )}
+            <Label>Condomínio</Label>
+            <Input value={condominioName} readOnly className="opacity-90" />
           </div>
 
-          {/* Título */}
           <div className="grid gap-2">
-            <Label htmlFor="titulo">Título</Label>
+            <Label>Título</Label>
             <Input
-              id="titulo"
               value={form.titulo}
               onChange={(e) => update("titulo", e.target.value)}
               placeholder="Ex.: Reunião de condóminos"
               required
-              disabled={submitting}
             />
           </div>
 
-          {/* Tipo / Estado */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Tipo</Label>
-              <Select
-                value={form.tipo_informacao}
-                onValueChange={(v) => update("tipo_informacao", v)}
-                disabled={submitting}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
+              <Select value={form.tipo_informacao} onValueChange={(v) => update("tipo_informacao", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TIPO_OPCOES.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
+                  {TIPO_OPCOES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="grid gap-2">
               <Label>Estado</Label>
-              <Select
-                value={form.estado_informacao}
-                onValueChange={(v) => update("estado_informacao", v)}
-                disabled={submitting}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o estado" />
-                </SelectTrigger>
+              <Select value={form.estado_informacao} onValueChange={(v) => update("estado_informacao", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {ESTADO_OPCOES.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
+                  {ESTADO_OPCOES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          {/* Descrição */}
           <div className="grid gap-2">
-            <Label htmlFor="descricao">Descrição</Label>
+            <Label>Descrição</Label>
             <Textarea
-              id="descricao"
               value={form.descricao ?? ""}
               onChange={(e) => update("descricao", e.target.value)}
-              placeholder="Detalhes da informação…"
               rows={4}
-              disabled={submitting}
+              placeholder="Detalhes…"
             />
           </div>
 
-          {/* Foto (upload para info_fotos) */}
+          {/* Foto */}
           <div className="grid gap-2">
-            <Label htmlFor="foto">Foto (opcional)</Label>
-            <Input
-              id="foto"
-              type="file"
-              accept="image/*"
-              onChange={onFotoChange}
-              disabled={submitting || fotoUploading}
-            />
+            <Label>Foto</Label>
+            <Input type="file" accept="image/*" onChange={onFotoChange} disabled={fotoUploading} />
             {fotoPreview ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={fotoPreview}
-                alt="Pré-visualização"
-                className="mt-2 max-h-28 rounded-md border object-contain"
-              />
+              <img src={fotoPreview} alt="Preview" className="max-h-28 rounded-md border object-contain" />
             ) : (
-              <div className="mt-2 flex h-24 items-center justify-center rounded-md border text-sm text-muted-foreground">
-                <ImageIcon className="mr-2 h-4 w-4" /> sem imagem
+              <div className="text-sm text-muted-foreground flex items-center gap-1">
+                <ImageIcon className="h-4 w-4" /> sem imagem
               </div>
             )}
-            {fotoUploading && (
-              <p className="text-sm text-muted-foreground">Enviando imagem… {fotoProgress}%</p>
-            )}
-            {/* Campo só leitura para mostrar URL final */}
-            {form.foto ? (
-              <Input value={form.foto} readOnly className="text-xs opacity-70" />
-            ) : null}
           </div>
 
-          {/* Anexo (URL opcional) */}
+          {/* Anexo */}
           <div className="grid gap-2">
-            <Label htmlFor="anexo">Anexo (URL, opcional)</Label>
+            <Label>Anexo (imagem ou PDF)</Label>
+            <Input type="file" accept="image/*,application/pdf" onChange={onAnexoChange} disabled={anexoUploading} />
+            {anexoPreview && (
+              anexoPreview === "pdf" ? (
+                <p className="text-sm text-blue-600 underline">📄 PDF pronto</p>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={anexoPreview} alt="Anexo" className="max-h-28 rounded-md border object-contain" />
+              )
+            )}
+            {anexoUploading && <p>Enviando anexo… {anexoProgress}%</p>}
             <Input
-              id="anexo"
               type="url"
-              placeholder="https://exemplo.com/arquivo.pdf"
-              value={form.anexo ?? ""}
-              onChange={(e) => update("anexo", e.target.value)}
-              disabled={submitting}
+              placeholder="ou insira uma URL manual"
+              value={anexoManual}
+              onChange={(e) => setAnexoManual(e.target.value)}
             />
           </div>
 
@@ -354,18 +298,9 @@ export function CreateInfoDialog({ defaultOpen, onCreated, triggerLabel = "Nova 
           <Separator />
 
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={submitting || fotoUploading || !selected}>
-              {submitting ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Criando…
-                </span>
-              ) : (
-                "Criar"
-              )}
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Criar"}
             </Button>
           </DialogFooter>
         </form>

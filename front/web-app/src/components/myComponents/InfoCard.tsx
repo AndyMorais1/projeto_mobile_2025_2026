@@ -16,8 +16,9 @@ import {
 import { cn } from "@/lib/utils";
 import {
   CalendarClock, EllipsisVertical, Image as ImageIcon, Link as LinkIcon,
-  FileText, Pencil, Trash2,
+  FileText, Pencil, Trash2, Download,
 } from "lucide-react";
+import { downloadFromUrl } from "@/lib/download";
 
 export type Info = {
   id: string;
@@ -52,6 +53,7 @@ function fmtDateTime(input?: string | Date | null) {
     timeZone: TIMEZONE,
   }).format(d);
 }
+
 function toneTipo(tipo?: string) {
   const s = (tipo || "").toLowerCase();
   if (s.includes("aviso")) return "border-amber-200 bg-amber-50 text-amber-800";
@@ -59,6 +61,7 @@ function toneTipo(tipo?: string) {
   if (s.includes("evento")) return "border-blue-200 bg-blue-50 text-blue-700";
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
+
 function toneEstado(estado?: string) {
   const s = (estado || "").toLowerCase();
   if (s === "ativo" || s === "publicado") return "border-green-200 bg-green-50 text-green-700";
@@ -68,7 +71,27 @@ function toneEstado(estado?: string) {
 
 export function InfoCard({ info, className, onEdit, onDelete }: Props) {
   const [open, setOpen] = React.useState(false);
-  const stop = (e: React.SyntheticEvent) => { e.preventDefault(); e.stopPropagation(); };
+  const [downloading, setDownloading] = React.useState(false);
+
+  const stop = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  /** 🔽 Função dedicada para download do anexo */
+  async function handleDownloadAnexo() {
+    if (!info.anexo) return;
+    try {
+      setDownloading(true);
+      const name = info.anexo.split("/").pop()?.split("?")[0] || "anexo";
+      await downloadFromUrl(info.anexo, name);
+    } catch (err) {
+      console.error(err);
+      alert("Falha ao transferir o anexo.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <>
@@ -76,7 +99,12 @@ export function InfoCard({ info, className, onEdit, onDelete }: Props) {
         role="button"
         tabIndex={0}
         onClick={() => setOpen(true)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
         className={cn(
           "group w-full overflow-hidden rounded-2xl border border-muted/40 shadow-sm transition-all",
           "hover:shadow-lg hover:border-muted focus:outline-none",
@@ -87,7 +115,6 @@ export function InfoCard({ info, className, onEdit, onDelete }: Props) {
         {/* HEADER */}
         <CardHeader className="p-5 pb-3">
           <div className="flex items-start justify-between gap-3">
-            {/* bloco do título precisa poder encolher -> min-w-0 + flex-1 */}
             <div className="min-w-0 flex-1 space-y-2">
               <CardTitle className="text-xl font-semibold leading-snug break-words line-clamp-2">
                 {info.titulo}
@@ -103,7 +130,6 @@ export function InfoCard({ info, className, onEdit, onDelete }: Props) {
               </div>
             </div>
 
-            {/* menu não pode crescer -> shrink-0 */}
             <div className="shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -129,16 +155,10 @@ export function InfoCard({ info, className, onEdit, onDelete }: Props) {
 
         {/* CONTENT */}
         <CardContent className="p-5 pt-0">
-          {/* Imagem sempre contida no card */}
           <div className="mb-4 overflow-hidden rounded-xl border bg-muted/20">
             {info.foto ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={info.foto}
-                alt={info.titulo}
-                className="block h-40 w-full object-cover"
-                loading="lazy"
-              />
+              <img src={info.foto} alt={info.titulo} className="block h-40 w-full object-cover" loading="lazy" />
             ) : (
               <div className="flex h-40 items-center justify-center text-muted-foreground">
                 <div className="flex items-center gap-2 text-sm">
@@ -148,12 +168,10 @@ export function InfoCard({ info, className, onEdit, onDelete }: Props) {
             )}
           </div>
 
-          {/* Descrição resumida controlada */}
           <p className="line-clamp-3 break-words text-sm leading-relaxed text-muted-foreground">
             {info.descricao?.trim() || "—"}
           </p>
 
-          {/* Anexo */}
           <div className="mt-3">
             {info.anexo ? (
               <span className="inline-flex items-center gap-2 text-sm font-medium text-foreground/90">
@@ -170,7 +188,6 @@ export function InfoCard({ info, className, onEdit, onDelete }: Props) {
 
           <Separator className="my-4" />
 
-          {/* Rodapé com chips responsivos e sem overflow */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="min-w-0 flex items-center justify-between rounded-xl border p-3">
               <div className="flex items-center gap-2 text-muted-foreground">
@@ -238,10 +255,15 @@ export function InfoCard({ info, className, onEdit, onDelete }: Props) {
                       Abrir
                     </a>
                   </Button>
-                  <Button asChild variant="secondary" size="sm" className="rounded-xl">
-                    <a href={info.anexo} download>
-                      Transferir
-                    </a>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="rounded-xl inline-flex items-center gap-1"
+                    onClick={handleDownloadAnexo}
+                    disabled={downloading}
+                  >
+                    <Download className="h-4 w-4" />
+                    {downloading ? "Transferindo…" : "Transferir"}
                   </Button>
                 </div>
               )}

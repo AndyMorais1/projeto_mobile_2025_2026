@@ -63,11 +63,6 @@ const items = [
     icon: NotebookPen,
   },
   {
-    title: "Faturas",
-    url: "/dashboard/faturas",
-    icon: ReceiptText,
-  },
-  {
     title: "Atividades",
     url: "/dashboard/atividades",
     icon: Clock,
