@@ -1,6 +1,6 @@
-import { useEffect, useState} from "react";
+import { useEffect, useState } from "react";
 import { ScrollView, Alert, Text } from "react-native";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router"; // 🧩 adicionado useRouter
 import { UserInfo, DocumentosCard, LogoutButton } from "@/components/detalhesDoPerfil";
 import { supabase } from "@/api/client";
 
@@ -8,6 +8,7 @@ export default function PerfilDetalhadoScreen() {
     const [user, setUser] = useState<any>(null);
     const [editavel, setEditavel] = useState(false);
     const [loading, setLoading] = useState(true);
+    const router = useRouter(); // 🧭 para redirecionar após logout
 
     // ====================== Carregar dados do utilizador ======================
     useEffect(() => {
@@ -61,6 +62,20 @@ export default function PerfilDetalhadoScreen() {
         }
     }
 
+    // ====================== Logout ======================
+    const handleLogout = async () => {
+        try {
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+
+            console.log("✅ Sessão terminada com sucesso!");
+            router.replace("/login"); // 🔁 redireciona pro login
+        } catch (err: any) {
+            console.error("Erro ao fazer logout:", err.message);
+            Alert.alert("Erro", "Falha ao encerrar a sessão.");
+        }
+    };
+
     // ====================== Interface ======================
     return (
         <>
@@ -98,7 +113,7 @@ export default function PerfilDetalhadoScreen() {
 
                 <DocumentosCard total={1} onPress={() => console.log("Abrir documentos")} />
 
-                <LogoutButton onPress={() => console.log("Logout efetuado")} />
+                <LogoutButton />
             </ScrollView>
         </>
     );
