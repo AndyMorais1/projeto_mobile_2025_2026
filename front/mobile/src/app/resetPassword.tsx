@@ -10,7 +10,7 @@ import {
     Alert,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { supabase }  from "../api/client";
+import { supabase } from "../api/client";
 
 export default function ResetPasswordScreen() {
     const router = useRouter();
@@ -18,8 +18,6 @@ export default function ResetPasswordScreen() {
     const [confirmPassword, setConfirmPassword] = useState("");
 
     // ====================== acção pra clicar "atualizar" ======================
-
-
 
     const handleReset = async () => {
         if (newPassword.trim() === "" || confirmPassword.trim() === "") {
@@ -40,6 +38,8 @@ export default function ResetPasswordScreen() {
                 return;
             }
 
+            console.log("👤 Utilizador atual:", user.id); // 🧩 adicionado
+
             // Atualiza a palavra-passe no Supabase Auth
             const { error: updateErr } = await supabase.auth.updateUser({
                 password: newPassword,
@@ -49,14 +49,20 @@ export default function ResetPasswordScreen() {
                 return;
             }
 
-            // Marca o utilizador como "já redefiniu a senha"
-            const { error: flagErr } = await supabase
+            // 🔄 Garante sessão válida após atualização de senha (🧩 adicionado)
+            await supabase.auth.refreshSession();
+
+            // ✅ Marca o utilizador como "já redefiniu a senha"
+            const { data: flagData, error: flagErr } = await supabase
                 .from("morador")
                 .update({ must_reset_password: false })
-                .eq("id", user.id);
+                .eq("id", user.id)
+                .select();
 
             if (flagErr) {
-                console.warn("Aviso: falha ao atualizar flag no morador", flagErr.message);
+                console.warn("⚠️ Falha ao atualizar must_reset_password:", flagErr.message);
+            } else {
+                console.log("✅ Flag must_reset_password atualizada:", flagData);
             }
 
             //  Confirma
@@ -67,8 +73,6 @@ export default function ResetPasswordScreen() {
             console.error(err);
         }
     };
-
-
 
     return (
         <>
