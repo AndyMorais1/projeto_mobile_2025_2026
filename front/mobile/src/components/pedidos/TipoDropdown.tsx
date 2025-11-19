@@ -1,18 +1,30 @@
 import { View, Text, TouchableOpacity } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
-interface TipoDropdownProps {
-    aberto: boolean;
-    valor: string;
-    tipos: string[];
-    onToggle: () => void;
-    onSelect: (tipo: string) => void;
+interface TipoOption {
+    label: string;
+    value: string;
 }
 
-export default function TipoDropdown({ aberto, valor, tipos, onToggle, onSelect }: TipoDropdownProps) {
+interface TipoDropdownProps {
+    aberto: boolean;
+    valor: string; // o label mostrado
+    tipos: TipoOption[];
+    onToggle: () => void;
+    onSelect: (item: TipoOption) => void;
+}
+
+export default function TipoDropdown({
+                                         aberto,
+                                         valor,
+                                         tipos,
+                                         onToggle,
+                                         onSelect,
+                                     }: TipoDropdownProps) {
+
     return (
         <View className="mb-6">
-            <Text className="text-gray-700 font-semibold mb-2">Tipo</Text>
+            <Text className="text-gray-700 font-semibold mb-2">Selecione</Text>
 
             <TouchableOpacity
                 className="border border-gray-300 rounded-xl px-4 py-3 flex-row justify-between items-center bg-gray-50"
@@ -28,13 +40,13 @@ export default function TipoDropdown({ aberto, valor, tipos, onToggle, onSelect 
 
             {aberto && (
                 <View className="border border-gray-300 rounded-xl bg-white mt-2">
-                    {tipos.map((tipo, index) => (
+                    {tipos.map((item, index) => (
                         <TouchableOpacity
                             key={index}
                             className="px-4 py-3 border-b border-gray-100"
-                            onPress={() => onSelect(tipo)}
+                            onPress={() => onSelect(item)}
                         >
-                            <Text className="text-gray-700">{tipo}</Text>
+                            <Text className="text-gray-700">{item.label}</Text>
                         </TouchableOpacity>
                     ))}
                 </View>

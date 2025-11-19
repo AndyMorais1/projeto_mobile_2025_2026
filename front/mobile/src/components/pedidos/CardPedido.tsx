@@ -7,7 +7,7 @@ interface CardPedidoProps {
     data: string;
     tipo: string;
     onPress: () => void;
-    temResposta?: boolean; // novo campo opcional
+    temResposta?: boolean; // já tinhas
 }
 
 export default function CardPedido({

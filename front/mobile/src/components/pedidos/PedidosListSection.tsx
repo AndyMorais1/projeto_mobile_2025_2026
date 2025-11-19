@@ -11,32 +11,56 @@ import { Feather } from "@expo/vector-icons";
 import CardPedido from "./CardPedido";
 
 interface Pedido {
+    id: string;
     titulo: string;
     estado: string;
     data: string;
     tipo: string;
-    descricao?: string;
+    descricao?: string | null;
+    respostaAdmin?: string | null;
+    categoria?: string | null;
+    urgencia?: string | null;
+    orcamento_max?: number | null;
+    data_prevista?: string | null;
+    hora_prevista?: string | null;
 }
 
 interface PedidosListProps {
     pedidos: Pedido[];
-    onDelete: (titulo: string) => void;
-    onEdit: (titulo: string, novosDados: any) => void;
+    onDelete: (id: string) => void;
+    onEdit?: (id: string, novosDados: any) => void;
 }
 
 export default function PedidosListSection({ pedidos, onDelete }: PedidosListProps) {
-    const [pedidoSelecionado, setPedidoSelecionado] = useState<any>(null);
+    const [pedidoSelecionado, setPedidoSelecionado] = useState<Pedido | null>(null);
     const [modalDetalhesVisivel, setModalDetalhesVisivel] = useState(false);
+
+    const formatarDataPrevista = (dataISO?: string | null) => {
+        if (!dataISO) return "-";
+        const d = new Date(dataISO);
+        if (Number.isNaN(d.getTime())) return dataISO;
+        return d.toLocaleDateString("pt-PT");
+    };
+
+    const formatarHoraPrevista = (hora?: string | null) => {
+        if (!hora) return "-";
+        // se vier como "HH:MM:SS" ou "HH:MM", mostramos só HH:MM
+        return hora.slice(0, 5);
+    };
 
     return (
         <>
             {/* ====================== LISTA DE PEDIDOS ====================== */}
             <FlatList
                 data={pedidos}
-                keyExtractor={(item, index) => index.toString()}
+                keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                     <CardPedido
-                        {...item}
+                        titulo={item.titulo}
+                        estado={item.estado}
+                        data={item.data}
+                        tipo={item.tipo}
+                        temResposta={!!item.respostaAdmin}
                         onPress={() => {
                             setPedidoSelecionado(item);
                             setModalDetalhesVisivel(true);
@@ -71,13 +95,29 @@ export default function PedidosListSection({ pedidos, onDelete }: PedidosListPro
                                             {pedidoSelecionado.titulo}
                                         </Text>
 
+                                        {/* Info geral (estado + data criação + tipo) */}
+                                        <View className="mb-4">
+                                            <Text className="text-gray-600">
+                                                <Text className="font-semibold">Estado: </Text>
+                                                {pedidoSelecionado.estado}
+                                            </Text>
+                                            <Text className="text-gray-600">
+                                                <Text className="font-semibold">Data do pedido: </Text>
+                                                {pedidoSelecionado.data}
+                                            </Text>
+                                            <Text className="text-gray-600">
+                                                <Text className="font-semibold">Tipo: </Text>
+                                                {pedidoSelecionado.tipo}
+                                            </Text>
+                                        </View>
+
                                         {/* Descrição */}
                                         <View className="bg-gray-100 rounded-xl p-4 mb-4 flex-row justify-between items-start">
                                             <Text className="text-gray-700 flex-1 mr-2">
                                                 {pedidoSelecionado.descricao || "Sem descrição disponível."}
                                             </Text>
 
-                                            {/* Ícone de edição só se for pendente */}
+                                            {/* Ícone de edição só se for pendente (apenas visual por enquanto) */}
                                             {pedidoSelecionado.estado === "Pendente" && (
                                                 <TouchableOpacity
                                                     onPress={() => console.log("Editar pedido")}
@@ -86,6 +126,54 @@ export default function PedidosListSection({ pedidos, onDelete }: PedidosListPro
                                                 </TouchableOpacity>
                                             )}
                                         </View>
+
+                                        {/* Detalhes de manutenção (se existirem) */}
+                                        {(pedidoSelecionado.categoria ||
+                                            pedidoSelecionado.urgencia ||
+                                            pedidoSelecionado.orcamento_max ||
+                                            pedidoSelecionado.data_prevista ||
+                                            pedidoSelecionado.hora_prevista) && (
+                                            <View className="mb-4 bg-gray-50 rounded-xl p-4 border border-gray-200">
+                                                <Text className="text-gray-800 font-semibold mb-2">
+                                                    Detalhes do pedido
+                                                </Text>
+
+                                                {pedidoSelecionado.categoria && (
+                                                    <Text className="text-gray-700 mb-1">
+                                                        <Text className="font-semibold">Categoria: </Text>
+                                                        {pedidoSelecionado.categoria}
+                                                    </Text>
+                                                )}
+
+                                                {pedidoSelecionado.urgencia && (
+                                                    <Text className="text-gray-700 mb-1">
+                                                        <Text className="font-semibold">Urgência: </Text>
+                                                        {pedidoSelecionado.urgencia}
+                                                    </Text>
+                                                )}
+
+                                                {pedidoSelecionado.orcamento_max != null && (
+                                                    <Text className="text-gray-700 mb-1">
+                                                        <Text className="font-semibold">Orçamento máximo: </Text>
+                                                        €{Number(pedidoSelecionado.orcamento_max).toFixed(2)}
+                                                    </Text>
+                                                )}
+
+                                                {pedidoSelecionado.data_prevista && (
+                                                    <Text className="text-gray-700 mb-1">
+                                                        <Text className="font-semibold">Data prevista: </Text>
+                                                        {formatarDataPrevista(pedidoSelecionado.data_prevista)}
+                                                    </Text>
+                                                )}
+
+                                                {pedidoSelecionado.hora_prevista && (
+                                                    <Text className="text-gray-700 mb-1">
+                                                        <Text className="font-semibold">Hora prevista: </Text>
+                                                        {formatarHoraPrevista(pedidoSelecionado.hora_prevista)}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        )}
 
                                         {/* Resposta do administrador */}
                                         {pedidoSelecionado?.respostaAdmin && (
@@ -103,7 +191,7 @@ export default function PedidosListSection({ pedidos, onDelete }: PedidosListPro
                                         <TouchableOpacity
                                             className="bg-red-500 self-end rounded-full px-6 py-2"
                                             onPress={() => {
-                                                onDelete(pedidoSelecionado.titulo);
+                                                onDelete(pedidoSelecionado.id);
                                                 setModalDetalhesVisivel(false);
                                             }}
                                         >
