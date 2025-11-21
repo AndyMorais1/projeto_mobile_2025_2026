@@ -308,21 +308,39 @@ export function CasaCard({
     setOpenCreateFatura(true);
   }
 
+ function getFunctionsUrl() {
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`;
+}
+
+
   async function handlePagarFatura(faturaId: string) {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL!.replace(
-        ".supabase.co",
-        ".functions.supabase.co"
-      )}/create_checkout_session`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fatura_id: faturaId }),
-      }
-    );
+    const { data: sessionData, error: sessionErr } =
+      await supabase.auth.getSession();
+    if (sessionErr || !sessionData?.session) {
+      toast.error("Sessão expirada. Faça login novamente.");
+      return;
+    }
+
+    const jwt = sessionData.session.access_token;
+
+    const functionsUrl = getFunctionsUrl();
+
+    console.log("Fatura ID:", faturaId)
+
+
+    const res = await fetch(`${functionsUrl}/create_checkout_session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: JSON.stringify({ fatura_id: faturaId }),
+    });
+
     const data = await res.json();
+
     if (data.url) window.location.href = data.url;
-    else toast.error(data.error || "Falha ao criar sessão de pagamento");
+    else toast.error(data.error || "Falha ao criar sessão de pagamento.");
   }
 
   async function canDeletePropriedade(): Promise<{
@@ -356,18 +374,22 @@ export function CasaCard({
     return s.replace(/[^\w\-\.]+/g, "_");
   }
 
-  function getFunctionsBase() {
-    return process.env.NEXT_PUBLIC_SUPABASE_URL!.replace(
-      ".supabase.co",
-      ".functions.supabase.co"
-    );
+  function getFunctionsBaseUrl() {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+
+  if (base.includes("127.0.0.1") || base.includes("localhost")) {
+    return `${base}/functions/v1`;
   }
+
+  return base.replace(".supabase.co", ".functions.supabase.co");
+}
+
 
   async function handleDownloadRecibo(f: Fatura) {
     if (!f.recibo_url) return;
 
     // chama a Function passando o Bearer token
-    const url = `${getFunctionsBase()}/download_receipt?fatura_id=${encodeURIComponent(
+    const url = `${getFunctionsBaseUrl()}/download_receipt?fatura_id=${encodeURIComponent(
       f.id
     )}`;
 

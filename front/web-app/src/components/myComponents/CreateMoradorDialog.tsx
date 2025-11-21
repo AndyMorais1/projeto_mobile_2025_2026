@@ -33,9 +33,15 @@ type Props = {
 };
 
 function getFunctionsBaseUrl() {
-  const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  return projectUrl.replace(".supabase.co", ".functions.supabase.co");
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+
+  if (base.includes("127.0.0.1") || base.includes("localhost")) {
+    return `${base}/functions/v1`;
+  }
+
+  return base.replace(".supabase.co", ".functions.supabase.co");
 }
+
 
 type Condominio = { id: string; nome: string };
 type Propriedade = { id: string; rua: string | null; numero: string | null; andar: string | null; nome_propriedade: string };
