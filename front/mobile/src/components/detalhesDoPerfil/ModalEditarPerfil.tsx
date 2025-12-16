@@ -8,21 +8,12 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
-/**
- * ======================
- * Componente: ModalEditarPerfil
- *
- * - Abre um modal com campos editáveis (nome, morada, telefone)
- * - Mostra botão para adicionar foto (placeholder por enquanto)
- * - Usa as funções passadas pelo pai (UserInfo) para alterar e salvar
- * ======================
- */
 type ModalEditarPerfilProps = {
-    visible: boolean;             // controla a visibilidade do modal
-    onClose: () => void;          // fecha o modal
-    user: any;                    // dados do utilizador (nome, morada, etc.)
-    onChange: (u: any) => void;   // atualiza estado local (no useState)
-    onSave: () => void;           // salva no Supabase (recebe handleSave)
+    visible: boolean;
+    onClose: () => void;
+    user: any;
+    onChange: (u: any) => void;
+    onSave: () => void;
 };
 
 export default function ModalEditarPerfil({
@@ -47,14 +38,6 @@ export default function ModalEditarPerfil({
                     <TextInput
                         value={user.nome}
                         onChangeText={(t) => onChange({ ...user, nome: t })}
-                        className="border border-gray-300 rounded-xl px-4 py-3 mb-3 text-gray-700"
-                    />
-
-                    {/* Campo: Morada */}
-                    <Text className="text-gray-500 mb-1">Morada</Text>
-                    <TextInput
-                        value={user.morada}
-                        onChangeText={(t) => onChange({ ...user, morada: t })}
                         className="border border-gray-300 rounded-xl px-4 py-3 mb-3 text-gray-700"
                     />
 

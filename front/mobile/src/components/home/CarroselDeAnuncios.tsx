@@ -1,10 +1,17 @@
-import { View, Text, ScrollView, TouchableOpacity, Image, Dimensions } from "react-native";
+import {
+    View,
+    Text,
+    ScrollView,
+    TouchableOpacity,
+    Image,
+    Dimensions,
+} from "react-native";
 
-interface Anuncio {
-    id: number;
+export interface Anuncio {
+    id: string;
     titulo: string;
     descricao: string;
-    imagem: string;
+    imagem?: string | null;
 }
 
 interface Props {
@@ -14,6 +21,19 @@ interface Props {
 
 export default function CarroselDeAnuncios({ anuncios, onSelect }: Props) {
     const { width } = Dimensions.get("window");
+
+    if (!anuncios || anuncios.length === 0) {
+        return (
+            <View className="p-4 mt-4 mb-10">
+                <Text className="text-xl font-bold mb-4 text-blue-500">
+                    Anúncios do Condomínio
+                </Text>
+                <Text className="text-gray-500">
+                    Não há anúncios ativos neste momento.
+                </Text>
+            </View>
+        );
+    }
 
     return (
         <View className="p-4 mt-4 mb-10">
@@ -39,16 +59,22 @@ export default function CarroselDeAnuncios({ anuncios, onSelect }: Props) {
                             style={{ width: width * 0.85 }}
                             className="bg-white rounded-2xl mr-4 shadow-md border border-gray-200 overflow-hidden"
                         >
-                            <Image
-                                source={{ uri: item.imagem }}
-                                style={{ width: "100%", height: 150 }}
-                                resizeMode="cover"
-                            />
+                            {item.imagem ? (
+                                <Image
+                                    source={{ uri: item.imagem }}
+                                    style={{ width: "100%", height: 150 }}
+                                    resizeMode="cover"
+                                />
+                            ) : null}
+
                             <View className="p-4">
                                 <Text className="text-2xl font-bold text-blue-500 mb-1">
                                     {item.titulo}
                                 </Text>
-                                <Text className="text-gray-600 number-of-lines-2">
+                                <Text
+                                    className="text-gray-600"
+                                    numberOfLines={2}
+                                >
                                     {item.descricao}
                                 </Text>
                             </View>

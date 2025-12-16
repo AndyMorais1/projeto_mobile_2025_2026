@@ -1,16 +1,11 @@
+// src/components/home/ModalDeAnuncios.tsx
 import {
     View,
     Text,
     Modal,
     TouchableWithoutFeedback,
 } from "react-native";
-
-interface Anuncio {
-    id: number;
-    titulo: string;
-    descricao: string;
-    imagem: string;
-}
+import type { Anuncio } from "./CarroselDeAnuncios";
 
 interface Props {
     visible: boolean;

@@ -9,9 +9,21 @@ interface CardFinanceiroProps {
     ano?: number;
     data?: string;
     onPagar?: () => void; // para abrir o modal do pagamento
+    reciboUrl?: string | null; // <- NOVO: URL do recibo (PDF, etc.)
+    onDownload?: () => void;   // <- NOVO: callback para download/abrir recibo
 }
 
-export default function CardFinanceiro({ tipo, descricao, valor, mes, ano, data,onPagar}: CardFinanceiroProps) {
+export default function CardFinanceiro({
+                                           tipo,
+                                           descricao,
+                                           valor,
+                                           mes,
+                                           ano,
+                                           data,
+                                           onPagar,
+                                           reciboUrl,
+                                           onDownload,
+                                       }: CardFinanceiroProps) {
 
     if (tipo === "pagamento") {
         return (
@@ -43,7 +55,14 @@ export default function CardFinanceiro({ tipo, descricao, valor, mes, ano, data,
                 <Text className="text-gray-400 text-base mb-1">{data}</Text>
                 <Text className="text-black text-lg font-semibold">{descricao}</Text>
             </View>
-            <Feather name="download" size={22} color="#3b82f6" />
+
+            <TouchableOpacity
+                onPress={onDownload}
+                disabled={!onDownload}
+                className={onDownload ? "p-2" : "p-2 opacity-40"}
+            >
+                <Feather name="download" size={22} color="#3b82f6" />
+            </TouchableOpacity>
         </View>
     );
 }
