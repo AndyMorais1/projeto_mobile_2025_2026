@@ -1,0 +1,134 @@
+// deno-lint-ignore-file no-explicit-any
+// @ts-nocheck
+
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+
+/* =====================================================
+   ENV
+===================================================== */
+const PROJECT_URL = Deno.env.get("PROJECT_URL"); // http://kong:8000
+const INTERNAL_AUTH_URL = Deno.env.get("INTERNAL_AUTH_URL"); // http://auth:9999
+const ANON_KEY = Deno.env.get("ANON_KEY");
+const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY");
+
+/* =====================================================
+   CORS
+===================================================== */
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json; charset=utf-8",
+};
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: corsHeaders,
+  });
+}
+
+/* =====================================================
+   AUTH — GOTRUE INTERNO (HA FIX)
+===================================================== */
+async function getUserFromJWT(authHeader: string) {
+  if (!authHeader) return null;
+
+  const res = await fetch(`${INTERNAL_AUTH_URL}/user`, {
+    headers: { Authorization: authHeader },
+  });
+
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+/* =====================================================
+   SUPABASE CLIENTS
+===================================================== */
+function supaUserClient(authHeader: string) {
+  return createClient(PROJECT_URL, ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+  });
+}
+
+function supaAdminClient() {
+  return createClient(PROJECT_URL, SERVICE_ROLE_KEY);
+}
+
+/* =====================================================
+   MAIN
+===================================================== */
+serve(async (req) => {
+  try {
+    /* ---------- CORS ---------- */
+    if (req.method === "OPTIONS")
+      return new Response("ok", { headers: corsHeaders });
+
+    if (req.method !== "POST")
+      return json({ error: "Use POST" }, 405);
+
+    /* ---------- AUTH ---------- */
+    const authHeader = req.headers.get("Authorization") || "";
+    const user = await getUserFromJWT(authHeader);
+
+    if (!user?.id)
+      return json({ error: "Não autenticado" }, 401);
+
+    /* ---------- BODY ---------- */
+    const body = await req.json().catch(() => ({}));
+    const { pedido_id, slot_id, fornecedor_id, resposta } = body;
+
+    if (!pedido_id || !slot_id || !fornecedor_id)
+      return json(
+        { error: "pedido_id, slot_id e fornecedor_id são obrigatórios" },
+        400,
+      );
+
+    const supaAdmin = supaAdminClient();
+
+    /* =====================================================
+       TRANSAÇÃO LÓGICA (SAFE CONCURRENCY)
+    ===================================================== */
+
+    // 1️⃣ Reservar slot (apenas se ainda estiver livre)
+    const { error: slotErr, count } = await supaAdmin
+      .from("fornecedor_slot")
+      .update({
+        status: "reservado",
+        pedido_id,
+      })
+      .eq("id", slot_id)
+      .eq("status", "livre");
+
+    if (slotErr)
+      return json({ error: slotErr.message }, 500);
+
+    if (count !== 1)
+      return json(
+        { error: "Slot indisponível ou já reservado" },
+        409,
+      );
+
+    // 2️⃣ Atualizar pedido
+    const { error: pedidoErr } = await supaAdmin
+      .from("pedido")
+      .update({
+        estado_pedido: "aprovado",
+        fornecedor_id,
+        resposta: resposta ?? null,
+      })
+      .eq("id", pedido_id);
+
+    if (pedidoErr)
+      return json({ error: pedidoErr.message }, 500);
+
+    /* ---------- OK ---------- */
+    return json({ ok: true });
+
+  } catch (e) {
+    console.error("ERRO pedido_aprovar_com_slot:", e);
+    return json({ error: e?.message ?? String(e) }, 500);
+  }
+});
