@@ -131,7 +131,7 @@ export default function PedidoCard({ pedido, onUpdated }: PedidoCardProps) {
   }
 
   /* =========================================================
-     SALVAR RESPOSTA
+     SALVAR (FLUXO CORRETO)
   ========================================================= */
 
   async function handleSave() {
@@ -142,15 +142,16 @@ export default function PedidoCard({ pedido, onUpdated }: PedidoCardProps) {
       return;
     }
 
-    if (estado === "aprovado" && !slotSelecionado) {
-      setError("Selecione um fornecedor antes de aprovar.");
-      return;
-    }
-
     setSaving(true);
 
     try {
+      /* ================= APROVAR ================= */
       if (estado === "aprovado") {
+        if (!slotSelecionado) {
+          setError("Selecione um fornecedor antes de aprovar.");
+          return;
+        }
+
         const { error } = await supabase.functions.invoke(
           "pedido_aprovar_com_slot",
           {
@@ -162,12 +163,23 @@ export default function PedidoCard({ pedido, onUpdated }: PedidoCardProps) {
           }
         );
 
-        if (error) throw error;
-      } else {
+        if (error) {
+          if (error.status === 409) {
+            setError(
+              "⚠️ Este horário já foi reservado. Atualize as sugestões."
+            );
+            return;
+          }
+          throw error;
+        }
+      }
+
+      /* ================= REJEITAR ================= */
+      if (estado === "rejeitado") {
         const { error } = await supabase
           .from("pedido")
           .update({
-            estado_pedido: estado,
+            estado_pedido: "rejeitado",
             resposta,
           })
           .eq("id", pedido.id);
@@ -175,6 +187,7 @@ export default function PedidoCard({ pedido, onUpdated }: PedidoCardProps) {
         if (error) throw error;
       }
 
+      /* ================= SUCESSO ================= */
       onUpdated?.({
         id: pedido.id,
         estado_pedido: estado,
@@ -182,8 +195,10 @@ export default function PedidoCard({ pedido, onUpdated }: PedidoCardProps) {
       });
 
       setOpenResposta(false);
-    } catch (e: any) {
-      setError(e.message ?? "Erro ao salvar.");
+      setSlotSelecionado(null); // 🔥 evita reaproveitamento
+    } catch (e) {
+      console.error(e);
+      setError("Erro ao salvar o pedido.");
     } finally {
       setSaving(false);
     }
@@ -241,7 +256,7 @@ export default function PedidoCard({ pedido, onUpdated }: PedidoCardProps) {
       </CardContent>
 
       <CardFooter className="flex justify-end gap-2">
-        {/* ================= CSP ================= */}
+        {/* ================= SUGESTÕES ================= */}
         <Dialog
           open={openSugestoes}
           onOpenChange={(v) => {
@@ -262,7 +277,7 @@ export default function PedidoCard({ pedido, onUpdated }: PedidoCardProps) {
             <DialogHeader>
               <DialogTitle>Fornecedores compatíveis</DialogTitle>
               <DialogDescription>
-                Sugestões geradas automaticamente.
+                Sugestões automáticas de agenda.
               </DialogDescription>
             </DialogHeader>
 
@@ -279,12 +294,7 @@ export default function PedidoCard({ pedido, onUpdated }: PedidoCardProps) {
                     key={s.slot_id}
                     className="border rounded-lg p-3 space-y-2"
                   >
-                    <div className="flex justify-between">
-                      <div>
-                        <p className="font-semibold">{s.fornecedor_nome}</p>
-                        <p className="text-xs capitalize">{s.tipo_servico}</p>
-                      </div>
-                    </div>
+                    <p className="font-semibold">{s.fornecedor_nome}</p>
 
                     <div className="text-xs">
                       {new Date(s.slot_inicio).toLocaleString("pt-PT")}
@@ -327,7 +337,15 @@ Gestão do Condomínio`
         </Dialog>
 
         {/* ================= RESPONDER ================= */}
-        <Dialog open={openResposta} onOpenChange={setOpenResposta}>
+        <Dialog
+          open={openResposta}
+          onOpenChange={(v) => {
+            setOpenResposta(v);
+            if (v === false) {
+              setSlotSelecionado(null); // 🔥 segurança extra
+            }
+          }}
+        >
           <DialogTrigger asChild>
             <Button size="sm" disabled={isFechado}>
               <MessageSquareMore className="h-4 w-4 mr-1" />
@@ -348,9 +366,8 @@ Gestão do Condomínio`
 
             <Select
               value={estado}
-              onValueChange={(value) => setEstado(value as PedidoEstado)}
+              onValueChange={(v) => setEstado(v as PedidoEstado)}
             >
-
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
