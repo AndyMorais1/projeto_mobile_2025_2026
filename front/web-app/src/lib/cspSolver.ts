@@ -1,125 +1,156 @@
-// ==============================================
-// CSP Solver (Constraint Satisfaction Problem)
-// ==============================================
-// Resolve o problema de satisfação de restrições para selecionar
-// os fornecedores mais compatíveis com base no pedido.
-// ----------------------------------------------
-// Variáveis: categoria, urgência, orçamento
-// Domínios: valores possíveis dessas variáveis
-// Restrições: regras que determinam a compatibilidade
-// ==============================================
+/* =========================================================
+   Tipos base
+========================================================= */
 
-export type CategoriaManutencao =
-  | "eletricista"
-  | "canalizador"
-  | "limpeza"
-  | "pintura"
-  | "jardinagem"
-  | "outro";
+export type PedidoCSP = {
+  categoria: string | null;
+  orcamento_max: number | null;
+  data: string | null;       // YYYY-MM-DD
+  hora: string | null;       // HH:mm
+  duracao_minutos: number;   // ex: 60
+};
 
-export type UrgenciaNivel = "baixa" | "media" | "alta" | null;
+export type Slot = {
+  inicio: string; // ISO timestamp
+  fim: string;    // ISO timestamp
+};
 
 export type ServicoFornecedor = {
-  tipo_servico: CategoriaManutencao;
+  tipo_servico: string;
   preco_medio?: number | null;
 };
 
-export type FornecedorCSP = {
+export type Fornecedor = {
   id: string;
   nome: string;
-  email?: string | null;
-  telefone?: string | null;
-  avaliacao_media?: number | null;
   disponibilidade?: boolean | null;
-  servicos: ServicoFornecedor[];
+  avaliacao_media?: number | null;
+  servicos?: ServicoFornecedor[];
+  slots?: Slot[];
 };
 
-export type PedidoCSP = {
-  categoria: CategoriaManutencao | null;
-  urgencia: UrgenciaNivel;
-  orcamento_max?: number | null;
-};
+/* =========================================================
+   Utilidades de data/hora
+========================================================= */
 
-/**
- * Resolve o CSP de seleção de fornecedor.
- * Retorna fornecedores válidos com um "score" de compatibilidade (0–1).
- */
+// Converte data + hora para Date
+function buildDateTime(date: string, time: string): Date {
+  return new Date(`${date}T${time}:00`);
+}
+
+// Soma minutos a uma data
+function addMinutes(date: Date, minutes: number): Date {
+  return new Date(date.getTime() + minutes * 60000);
+}
+
+/* =========================================================
+   Função principal do CSP
+========================================================= */
+
 export function resolverCSP(
   pedido: PedidoCSP,
-  fornecedores: FornecedorCSP[]
-): { fornecedor: FornecedorCSP; score: number }[] {
-  if (!fornecedores || fornecedores.length === 0) return [];
-  if (!pedido.categoria) return [];
+  fornecedores: Fornecedor[]
+) {
+  const solucoes: {
+    fornecedor: Fornecedor;
+    slot: Slot;
+    score: number;
+  }[] = [];
 
-  // ⚙️ 1. Filtra apenas fornecedores que oferecem o tipo de serviço
-  const fornecedoresValidos = fornecedores.filter((f) =>
-    f.servicos.some(
-      (s) => s.tipo_servico.toLowerCase() === pedido.categoria!.toLowerCase()
-    )
-  );
+  /* =======================================================
+     Pré-validações
+  ======================================================= */
 
-  if (fornecedoresValidos.length === 0) return [];
+  if (
+    !pedido.categoria ||
+    !pedido.data ||
+    !pedido.hora ||
+    !pedido.duracao_minutos
+  ) {
+    return [];
+  }
 
-  // ⚖️ 2. Avalia cada fornecedor com base nas restrições
-  const results = fornecedoresValidos.map((f) => {
-    let score = 0;
+  const pedidoInicio = buildDateTime(pedido.data, pedido.hora);
+  const pedidoFim = addMinutes(pedidoInicio, pedido.duracao_minutos);
 
-    // ---- 1️⃣ Categoria (peso 0.4) ----
-    // Já filtramos, mas podemos reforçar o peso se ele oferece múltiplos serviços
-    const matchCount = f.servicos.filter(
-      (s) => s.tipo_servico.toLowerCase() === pedido.categoria!.toLowerCase()
-    ).length;
-    score += 0.4 * Math.min(1, matchCount); // 0.4 pontos totais
+  /* =======================================================
+     BACKTRACKING (3 variáveis)
+     Variável 1: Fornecedor
+     Variável 2: Serviço
+     Variável 3: Slot
+  ======================================================= */
 
-    // ---- 2️⃣ Disponibilidade (peso 0.2) ----
-    if (f.disponibilidade) score += 0.2;
-    else score -= 0.05; // pequena penalização se indisponível
+  function backtrack(
+    fornecedorIdx: number
+  ) {
+    if (fornecedorIdx >= fornecedores.length) return;
 
-    // ---- 3️⃣ Avaliação média (peso 0.2) ----
-    const rating = f.avaliacao_media ?? 0;
-    if (rating >= 4.8) score += 0.2;
-    else if (rating >= 4.5) score += 0.18;
-    else if (rating >= 4.0) score += 0.14;
-    else if (rating >= 3.5) score += 0.1;
-    else if (rating >= 3.0) score += 0.05;
-    else score -= 0.05; // penaliza avaliações ruins
+    const fornecedor = fornecedores[fornecedorIdx];
 
-    // ---- 4️⃣ Orçamento (peso 0.1) ----
-    const precoServico =
-      f.servicos.find(
-        (s) =>
-          s.tipo_servico.toLowerCase() === pedido.categoria!.toLowerCase()
-      )?.preco_medio ?? null;
+    /* ---------- Restrição 1: fornecedor disponível ---------- */
+    if (!fornecedor.disponibilidade) {
+      backtrack(fornecedorIdx + 1);
+      return;
+    }
 
-    if (pedido.orcamento_max && precoServico) {
-      const diff = precoServico - pedido.orcamento_max;
+    /* ---------- Variável 2: serviços ---------- */
+    const servicos = fornecedor.servicos ?? [];
 
-      if (diff <= 0) {
-        // Está dentro do orçamento
-        score += 0.1;
-      } else if (diff <= 50) {
-        // Levemente acima (aceitável)
-        score += 0.05;
-      } else {
-        // Muito acima
-        score -= 0.1;
+    for (const servico of servicos) {
+      /* ---------- Restrição 2: categoria ---------- */
+      if (servico.tipo_servico !== pedido.categoria) continue;
+
+      /* ---------- Restrição 3: orçamento ---------- */
+      if (
+        pedido.orcamento_max != null &&
+        servico.preco_medio != null &&
+        servico.preco_medio > pedido.orcamento_max
+      ) {
+        continue;
+      }
+
+      /* ---------- Variável 3: slots ---------- */
+      const slots = fornecedor.slots ?? [];
+
+      for (const slot of slots) {
+        const slotInicio = new Date(slot.inicio);
+        const slotFim = new Date(slot.fim);
+
+        /* ===================================================
+           🔑 REGRA CORRIGIDA – INTERSEÇÃO DE HORÁRIO
+           
+           Um slot é válido se INTERSECTAR o pedido:
+           
+           slot.inicio < pedidoFim
+           slot.fim    > pedidoInicio
+        =================================================== */
+
+        const intersecta =
+          slotInicio < pedidoFim &&
+          slotFim > pedidoInicio;
+
+        if (!intersecta) continue;
+
+        /* ---------- Score (heurística simples) ---------- */
+        const score =
+          (fornecedor.avaliacao_media ?? 0) / 5;
+
+        solucoes.push({
+          fornecedor,
+          slot,
+          score,
+        });
       }
     }
 
-    // ---- 5️⃣ Urgência (peso 0.1) ----
-    if (pedido.urgencia) {
-      const urg = pedido.urgencia.toLowerCase();
-      if (urg === "alta") score += f.disponibilidade ? 0.1 : 0.02;
-      else if (urg === "media") score += f.disponibilidade ? 0.05 : 0.02;
-      else score += 0.02; // baixa urgência, pouca influência
-    }
+    backtrack(fornecedorIdx + 1);
+  }
 
-    // 🔒 Normaliza score entre 0 e 1
-    score = Math.max(0, Math.min(1, score));
+  backtrack(0);
 
-    return { fornecedor: f, score };
-  });
+  /* =======================================================
+     Ordenação final (melhor score primeiro)
+  ======================================================= */
 
-  // 🔝 Ordena pelo score decrescente
-  return results.sort((a, b) => b.score - a.score);
+  return solucoes.sort((a, b) => b.score - a.score);
 }

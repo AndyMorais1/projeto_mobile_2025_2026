@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 
+/* -------------------- Tipos -------------------- */
+
 type CategoriaManutencao =
   | "eletricista"
   | "canalizador"
@@ -32,10 +34,28 @@ type CategoriaManutencao =
   | "outro";
 
 type ServicoFornecedor = {
-  id?: string;
   tipo_servico: CategoriaManutencao;
   preco_medio?: number | null;
 };
+
+type Intervalo = {
+  inicio: string;
+  fim: string;
+};
+
+/* -------------------- Utils -------------------- */
+
+// 🔑 converte DD/MM/YYYY → YYYY-MM-DD
+function toISODate(value?: string | null) {
+  if (!value) return "";
+  if (value.includes("/")) {
+    const [d, m, y] = value.split("/");
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  return value;
+}
+
+/* -------------------- Componente -------------------- */
 
 export function EditFornecedorDialog({
   open,
@@ -48,26 +68,49 @@ export function EditFornecedorDialog({
   fornecedor: any;
   onUpdated?: () => void;
 }) {
+  /* -------- Dados básicos -------- */
   const [nome, setNome] = React.useState(fornecedor.nome);
   const [email, setEmail] = React.useState(fornecedor.email ?? "");
   const [telefone, setTelefone] = React.useState(fornecedor.telefone ?? "");
-  const [avaliacao, setAvaliacao] = React.useState<number>(
-    fornecedor.avaliacao_media ?? 0
-  );
+
+  /* -------- Serviços -------- */
   const [servicos, setServicos] = React.useState<ServicoFornecedor[]>(
     fornecedor.servicos ?? []
   );
+
+  /* -------- Disponibilidade / Agenda -------- */
+  const [periodoInicio, setPeriodoInicio] = React.useState(
+    toISODate(fornecedor.periodo_inicio)
+  );
+  const [periodoFim, setPeriodoFim] = React.useState(
+    toISODate(fornecedor.periodo_fim)
+  );
+
+  const [diasSemana, setDiasSemana] = React.useState<number[]>(
+    fornecedor.dias_semana ?? [1, 2, 3, 4, 5]
+  );
+
+  const [duracaoSlot, setDuracaoSlot] = React.useState(
+    fornecedor.duracao_slot_minutos ?? 60
+  );
+
+  const [intervalos, setIntervalos] = React.useState<Intervalo[]>(
+    fornecedor.intervalos ?? [{ inicio: "08:00", fim: "12:00" }]
+  );
+
   const [saving, setSaving] = React.useState(false);
 
+  /* -------------------- Helpers -------------------- */
+
   function addServico() {
-    setServicos([
-      ...servicos,
+    setServicos((p) => [
+      ...p,
       { tipo_servico: "eletricista", preco_medio: null },
     ]);
   }
 
   function removeServico(idx: number) {
-    setServicos(servicos.filter((_, i) => i !== idx));
+    setServicos((p) => p.filter((_, i) => i !== idx));
   }
 
   function updateServico(
@@ -75,122 +118,121 @@ export function EditFornecedorDialog({
     field: keyof ServicoFornecedor,
     value: any
   ) {
-    const updated = [...servicos];
-    updated[idx] = { ...updated[idx], [field]: value };
-    setServicos(updated);
+    const copy = [...servicos];
+    copy[idx] = { ...copy[idx], [field]: value };
+    setServicos(copy);
   }
 
+  function toggleDiaSemana(dia: number) {
+    setDiasSemana((p) =>
+      p.includes(dia) ? p.filter((d) => d !== dia) : [...p, dia]
+    );
+  }
+
+  function addIntervalo() {
+    setIntervalos((p) => [...p, { inicio: "14:00", fim: "18:00" }]);
+  }
+
+  function removeIntervalo(idx: number) {
+    setIntervalos((p) => p.filter((_, i) => i !== idx));
+  }
+
+  /* -------------------- Save -------------------- */
+
   async function handleSave() {
+    if (!nome.trim()) {
+      toast.error("O nome é obrigatório.");
+      return;
+    }
+
+    if (!periodoInicio || !periodoFim) {
+      toast.error("Defina o período da agenda.");
+      return;
+    }
+
+    if (diasSemana.length === 0) {
+      toast.error("Selecione pelo menos um dia da semana.");
+      return;
+    }
+
     setSaving(true);
+
     try {
-      const { error: errF } = await supabase
-        .from("fornecedor")
-        .update({ nome, email, telefone, avaliacao_media: avaliacao })
-        .eq("id", fornecedor.id);
-      if (errF) throw errF;
-
-      // Remove os serviços antigos e recria os novos
-      await supabase
-        .from("fornecedor_servico")
-        .delete()
-        .eq("fornecedor_id", fornecedor.id);
-
-      if (servicos.length > 0) {
-        const rows = servicos.map((s) => ({
-          fornecedor_id: fornecedor.id,
-          tipo_servico: s.tipo_servico,
-          preco_medio: s.preco_medio ?? null,
-        }));
-        const { error: errServ } = await supabase
-          .from("fornecedor_servico")
-          .insert(rows);
-        if (errServ) throw errServ;
-      }
+      await supabase.functions.invoke("fornecedor_upsert_com_agenda", {
+        body: {
+          fornecedor: {
+            id: fornecedor.id,
+            nome: nome.trim(),
+            email: email.trim() || null,
+            telefone: telefone.trim() || null,
+            duracao_slot_minutos: duracaoSlot,
+          },
+          servicos,
+          agenda: {
+            periodo_inicio: periodoInicio,
+            periodo_fim: periodoFim,
+            dias_semana: diasSemana,
+            intervalos,
+          },
+        },
+      });
 
       toast.success("Fornecedor atualizado com sucesso!");
       onUpdated?.();
       onOpenChange(false);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
-      toast.error("Erro ao salvar fornecedor: " + e.message);
+      toast.error("Erro ao atualizar fornecedor.");
     } finally {
       setSaving(false);
     }
   }
 
+  /* -------------------- UI -------------------- */
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Editar Fornecedor</DialogTitle>
+          <DialogTitle>Editar fornecedor</DialogTitle>
           <DialogDescription>
-            Atualize as informações, avaliação e serviços do fornecedor.
+            Atualize dados, serviços e disponibilidade.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Nome */}
+          {/* Dados básicos */}
           <div>
             <Label>Nome</Label>
+            <Input value={nome} onChange={(e) => setNome(e.target.value)} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
             <Input
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Nome do fornecedor"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
-          </div>
-
-          {/* Contatos */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>Email</Label>
-              <Input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="fornecedor@email.com"
-              />
-            </div>
-            <div>
-              <Label>Telefone</Label>
-              <Input
-                value={telefone}
-                onChange={(e) => setTelefone(e.target.value)}
-                placeholder="+351 912 345 678"
-              />
-            </div>
-          </div>
-
-          {/* Avaliação média */}
-          <div>
-            <Label>Avaliação média (0 a 5)</Label>
             <Input
-              type="number"
-              min={0}
-              max={5}
-              step="0.1"
-              value={avaliacao}
-              onChange={(e) =>
-                setAvaliacao(parseFloat(e.target.value) || 0)
-              }
-              placeholder="4.5"
+              placeholder="Telefone"
+              value={telefone}
+              onChange={(e) => setTelefone(e.target.value)}
             />
           </div>
 
           {/* Serviços */}
-          <div className="space-y-2">
-            <Label>Serviços oferecidos</Label>
+          <div>
+            <Label>Serviços</Label>
             {servicos.map((s, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-2 border p-2 rounded-lg"
-              >
+              <div key={idx} className="flex gap-2 mt-2">
                 <Select
                   value={s.tipo_servico}
                   onValueChange={(v) =>
-                    updateServico(idx, "tipo_servico", v as CategoriaManutencao)
+                    updateServico(idx, "tipo_servico", v)
                   }
                 >
                   <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Serviço" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="eletricista">Eletricista</SelectItem>
@@ -205,7 +247,6 @@ export function EditFornecedorDialog({
                 <Input
                   type="number"
                   step="0.01"
-                  placeholder="Preço médio (€)"
                   value={s.preco_medio ?? ""}
                   onChange={(e) =>
                     updateServico(
@@ -214,7 +255,6 @@ export function EditFornecedorDialog({
                       parseFloat(e.target.value) || null
                     )
                   }
-                  className="w-32"
                 />
 
                 <Button
@@ -227,18 +267,87 @@ export function EditFornecedorDialog({
               </div>
             ))}
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2 gap-2"
-              onClick={addServico}
-            >
-              <Plus className="h-4 w-4" /> Adicionar serviço
+            <Button variant="outline" className="mt-2" onClick={addServico}>
+              <Plus className="h-4 w-4 mr-1" /> Adicionar serviço
+            </Button>
+          </div>
+
+          {/* Disponibilidade */}
+          <div className="border-t pt-4 space-y-3">
+            <Label className="text-base">Disponibilidade</Label>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                type="date"
+                value={periodoInicio}
+                onChange={(e) => setPeriodoInicio(e.target.value)}
+              />
+              <Input
+                type="date"
+                value={periodoFim}
+                onChange={(e) => setPeriodoFim(e.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {[1, 2, 3, 4, 5, 6, 0].map((d) => (
+                <Button
+                  key={d}
+                  size="sm"
+                  variant={diasSemana.includes(d) ? "default" : "outline"}
+                  onClick={() => toggleDiaSemana(d)}
+                >
+                  {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"][d]}
+                </Button>
+              ))}
+            </div>
+
+            <Label>Duração do slot (min)</Label>
+            <Input
+              type="number"
+              min={15}
+              step={15}
+              value={duracaoSlot}
+              onChange={(e) => setDuracaoSlot(Number(e.target.value))}
+            />
+
+            <Label>Horários</Label>
+            {intervalos.map((h, idx) => (
+              <div key={idx} className="flex gap-2">
+                <Input
+                  type="time"
+                  value={h.inicio}
+                  onChange={(e) => {
+                    const c = [...intervalos];
+                    c[idx].inicio = e.target.value;
+                    setIntervalos(c);
+                  }}
+                />
+                <Input
+                  type="time"
+                  value={h.fim}
+                  onChange={(e) => {
+                    const c = [...intervalos];
+                    c[idx].fim = e.target.value;
+                    setIntervalos(c);
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeIntervalo(idx)}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+
+            <Button variant="outline" onClick={addIntervalo}>
+              <Plus className="h-4 w-4 mr-1" /> Adicionar horário
             </Button>
           </div>
         </div>
 
-        {/* Ações */}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
