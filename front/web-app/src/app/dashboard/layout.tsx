@@ -3,7 +3,7 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/myComponents/AppSidebar";
 import { Header } from "@/components/myComponents/Header";
-import { CondominiumNavbar } from "@/components/myComponents/condominiumNavbar"
+import { CondominiumNavbar } from "@/components/myComponents/condominiumNavbar";
 import { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { CondominiumProvider } from "@/context/CondominiumProvider";
@@ -27,7 +27,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <main className="w-full overflow-x-hidden">
           <SidebarTrigger className="sm:hidden md:hidden" />
           <Header />
-            {showCondominiumNavbar && <CondominiumNavbar />}
+          {showCondominiumNavbar && <CondominiumNavbar />}
           {children}
         </main>
       </SidebarProvider>

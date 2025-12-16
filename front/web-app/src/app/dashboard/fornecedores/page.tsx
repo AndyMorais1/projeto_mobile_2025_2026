@@ -23,21 +23,41 @@ export default function FornecedoresPage() {
   const [filtro, setFiltro] = React.useState("todos");
   const [openCreate, setOpenCreate] = React.useState(false);
 
+  /* debounce da busca */
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
     return () => clearTimeout(t);
   }, [search]);
 
+  /* ================================
+     LOAD FORNECEDORES
+  ================================= */
   async function carregarFornecedores() {
     setLoading(true);
     try {
       let query = supabase
         .from("fornecedor")
-        .select(
-          `id, nome, email, telefone, avaliacao_media, disponibilidade,
-           fornecedor_servico ( tipo_servico, preco_medio )`
-        )
+        .select(`
+          id,
+          nome,
+          email,
+          telefone,
+          avaliacao_media,
+          disponibilidade,
+
+          fornecedor_servico (
+            tipo_servico,
+            preco_medio
+          ),
+
+          fornecedor_disponibilidade_regra (
+            id,
+            dia_semana,
+            hora_inicio,
+            hora_fim
+          )
+        `)
         .order("nome", { ascending: true });
 
       if (filtro !== "todos") {
@@ -57,10 +77,12 @@ export default function FornecedoresPage() {
         (data ?? []).map((f: any) => ({
           ...f,
           servicos: f.fornecedor_servico ?? [],
+          fornecedor_disponibilidade_regra:
+            f.fornecedor_disponibilidade_regra ?? [],
         }))
       );
     } catch (e) {
-      console.error(e);
+      console.error("Erro ao carregar fornecedores:", e);
       setFornecedores([]);
     } finally {
       setLoading(false);
@@ -71,11 +93,12 @@ export default function FornecedoresPage() {
     carregarFornecedores();
   }, [debouncedSearch, filtro]);
 
+  /* ================================
+     UI
+  ================================= */
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4">
-      <div className="flex items-center justify-between"></div>
-
-      {/* Filtros e busca */}
+      {/* filtros */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex-1 flex gap-2">
           <Input
@@ -90,7 +113,6 @@ export default function FornecedoresPage() {
               setDebouncedSearch("");
             }}
             className="gap-2"
-            title="Limpar busca"
           >
             <RefreshCcw className="h-4 w-4" /> Limpar
           </Button>
@@ -106,6 +128,7 @@ export default function FornecedoresPage() {
             <SelectItem value="indisponivel">Indisponível</SelectItem>
           </SelectContent>
         </Select>
+
         <Button onClick={() => setOpenCreate(true)} className="gap-2">
           <Plus className="h-4 w-4" /> Novo fornecedor
         </Button>
@@ -119,10 +142,11 @@ export default function FornecedoresPage() {
         </Button>
       </div>
 
+      {/* lista */}
       {loading ? (
         <div className="flex items-center justify-center py-12 text-muted-foreground">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Carregando
-          fornecedores...
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          Carregando fornecedores...
         </div>
       ) : fornecedores.length === 0 ? (
         <Card>
@@ -143,7 +167,7 @@ export default function FornecedoresPage() {
         </div>
       )}
 
-      {/* Criar fornecedor */}
+      {/* criar */}
       <CreateFornecedorDialog
         open={openCreate}
         onOpenChange={setOpenCreate}
