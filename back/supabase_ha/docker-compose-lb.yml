@@ -1,0 +1,16 @@
+name: load_balancer
+services:
+  supabase-nginx-lb:
+    container_name: supabase-nginx-lb
+    image: nginx:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx-supabase.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - supabase_default
+
+networks:
+  supabase_default:
+    external: true

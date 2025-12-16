@@ -1,0 +1,219 @@
+name: supabase_2
+
+services:
+
+  # ------------------ API GATEWAY NODE 2 ------------------
+  kong-2:
+    image: kong:2.8.1
+    container_name: supabase-kong-2
+    restart: unless-stopped
+    networks: [supabase_default]
+    ports:
+      - "8001:8000"
+      - "8444:8443"
+    volumes:
+      - ./volumes/api/kong.yml:/home/kong/temp.yml:ro
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
+    entrypoint: bash -c 'eval "echo \"$$(cat ~/temp.yml)\"" > ~/kong.yml && /docker-entrypoint.sh kong docker-start'
+
+  # ------------------ REST API NODE 2 ------------------
+  rest-2:
+    image: postgrest/postgrest:v13.0.7
+    container_name: rest-2
+    restart: unless-stopped
+    networks: [ supabase_default ]
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@haproxy-db:5000/postgres
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_SCHEMAS: public,storage
+
+  # ------------------ AUTH NODE 2 ------------------
+  auth-2:
+    image: supabase/gotrue:v2.183.0
+    container_name: supabase-auth-2
+    restart: unless-stopped
+    networks: [ supabase_default ]
+    ports:
+      - "9998:9999"
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+
+      # IGUAL AO AUTH PRINCIPAL
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL}
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@haproxy-db:5000/postgres?search_path=auth
+      GOTRUE_DB_SCHEMA: auth
+
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP}
+      GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM}
+
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP}
+
+
+  # ------------------ REALTIME NODE 2 ------------------
+  realtime-2:
+    image: supabase/realtime:v2.65.2
+    container_name: realtime-2
+    restart: unless-stopped
+    networks: [ supabase_default ]
+    ports:
+      - "4001:4000" # Porta diferente da principal para não conflitar
+    environment:
+      PORT: 4000
+
+      DB_HOST: haproxy-db
+      DB_PORT: 5000
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
+
+      # Chaves essenciais
+      API_JWT_SECRET: ${JWT_SECRET}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      DB_ENC_KEY: supabaserealtime
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+
+      # Nome único — corrige o erro que você recebeu
+      APP_NAME: realtime_2
+
+      # habilita funcionamento autônomo
+      SEED_SELF_HOST: true
+      RUN_JANITOR: true
+
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:4000/" ]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+
+  # ------------------ ANALYTICS NODE 2 ------------------
+  analytics-2:
+    image: supabase/logflare:1.26.12
+    container_name: analytics-2
+    restart: unless-stopped
+    networks: [supabase_default]
+    ports:
+      - "4002:4000"
+    environment:
+      DB_USERNAME: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOSTNAME: haproxy-db
+      DB_PORT: 5000
+      DB_DATABASE: _supabase
+      DB_SCHEMA: _analytics
+      POSTGRES_BACKEND_URL: postgresql://supabase_admin:${POSTGRES_PASSWORD}@haproxy-db:5000/_supabase
+      POSTGRES_BACKEND_SCHEMA: _analytics
+      LOGFLARE_FEATURE_FLAG_OVERRIDE: multibackend=true
+
+  # ------------------ FUNCTIONS NODE 2 ------------------
+  functions-2:
+    container_name: supabase-edge-functions-2
+    image: supabase/edge-runtime:v1.69.25
+    restart: unless-stopped
+    networks: [ supabase_default ]
+    ports:
+      - "54322:54321"
+
+    volumes:
+      - ./volumes/functions:/home/deno/functions:Z   # compartilha o mesmo código
+
+    depends_on:
+      analytics-2:
+        condition: service_started
+
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+
+      # apontar para o serviço da instância 2
+      PROJECT_URL: http://supabase-kong-2:8000
+      SUPABASE_URL: http://supabase-kong-2:8000
+      INTERNAL_AUTH_URL: http://auth-2:9999
+
+      # mesma chave do projeto principal
+      ANON_KEY: ${ANON_KEY}
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+
+      DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@haproxy-db:5000/postgres
+      SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@haproxy-db:5000/postgres
+
+      EMAIL_FROM: "MyKondo <suporte@mail.mykondo.info>"
+      RESEND_API_KEY: ${RESEND_API_KEY}
+
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+
+      VERIFY_JWT: "false" # igual à instância principal para testes
+
+    command:
+      [
+        "start",
+        "--main-service",
+        "/home/deno/functions/main"
+      ]
+
+  storage-2:
+    container_name: supabase-storage-2
+    image: supabase/storage-api:v1.32.0
+    restart: unless-stopped
+    networks: [ supabase_default ]
+    ports:
+      - "5002:5000"
+    volumes:
+      - ./volumes/storage:/var/lib/storage:z
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://storage:5000/status"
+        ]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    depends_on:
+      rest-2:
+        condition: service_started
+      analytics-2:
+        condition: service_started
+    environment:
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://rest-2:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@haproxy-db:5000/postgres?search_path=storage
+      REQUEST_ALLOW_X_FORWARDED_PATH: "true"
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: stub
+      GLOBAL_S3_BUCKET: stub
+      ENABLE_IMAGE_TRANSFORMATION: "true"
+      IMGPROXY_URL: http://imgproxy:5001
+
+
+networks:
+  supabase_default:
+    external: true

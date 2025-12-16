@@ -1,0 +1,302 @@
+_format_version: '2.1'
+_transform: true
+
+###
+### Consumers / Users
+###
+consumers:
+  - username: DASHBOARD
+  - username: anon
+    keyauth_credentials:
+      - key: $SUPABASE_ANON_KEY
+  - username: service_role
+    keyauth_credentials:
+      - key: $SUPABASE_SERVICE_KEY
+
+###
+### Access Control List
+###
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: service_role
+    group: admin
+
+###
+### Dashboard credentials
+###
+basicauth_credentials:
+  - consumer: DASHBOARD
+    username: $DASHBOARD_USERNAME
+    password: $DASHBOARD_PASSWORD
+
+###
+### API Routes
+###
+services:
+  ## Open Auth routes
+  - name: auth-v1-open
+    url: http://supabase-auth-upstream/verify
+    routes:
+      - name: auth-v1-open
+        strip_path: true
+        paths:
+          - /auth/v1/verify
+    plugins:
+      - name: cors
+
+  - name: auth-v1-open-callback
+    url: http://supabase-auth-upstream/callback
+    routes:
+      - name: auth-v1-open-callback
+        strip_path: true
+        paths:
+          - /auth/v1/callback
+    plugins:
+      - name: cors
+
+  - name: auth-v1-open-authorize
+    url: http://supabase-auth-upstream/authorize
+    routes:
+      - name: auth-v1-open-authorize
+        strip_path: true
+        paths:
+          - /auth/v1/authorize
+    plugins:
+      - name: cors
+
+  ## Secure Auth routes  (🔥 AGORA SEM key-auth)
+  ## Secure Auth routes (GoTrue)
+  - name: auth-v1
+    url: http://supabase-auth-upstream
+    routes:
+      - name: auth-v1-all
+        strip_path: true
+        paths:
+          - /auth/v1/
+    plugins:
+      - name: cors
+
+
+  ## Secure REST routes
+  - name: rest-v1
+    url: http://supabase-rest-upstream
+    routes:
+      - name: rest-v1-all
+        strip_path: true
+        paths:
+          - /rest/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+          key_names:
+            - apikey
+          key_in_header: true
+          key_in_query: true
+          key_in_body: false
+      - name: acl
+        config:
+          allow:
+            - admin
+            - anon
+
+    ## Secure GraphQL routes
+  - name: graphql-v1
+    url: http://rest:3000/rpc/graphql
+    routes:
+      - name: graphql-v1-all
+        strip_path: true
+        paths:
+          - /graphql/v1
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: true
+      - name: request-transformer
+        config:
+          add:
+            headers:
+              - Content-Profile:graphql_public
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## Secure Realtime routes
+  - name: realtime-v1-ws
+    url: http://realtime-dev.supabase-realtime:4000/socket
+    protocol: ws
+    routes:
+      - name: realtime-v1-ws
+        strip_path: true
+        paths:
+          - /realtime/v1/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+          key_names:
+            - apikey
+          key_in_header: true
+          key_in_query: true
+          key_in_body: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  - name: realtime-v1-rest
+    url: http://realtime-dev.supabase-realtime:4000/api
+    protocol: http
+    routes:
+      - name: realtime-v1-rest
+        strip_path: true
+        paths:
+          - /realtime/v1/api
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+          key_names:
+            - apikey
+          key_in_header: true
+          key_in_query: true
+          key_in_body: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+            - anon
+
+  ## Storage (sem key auth)
+  - name: storage-v1
+    url: http://supabase-storage-upstream/
+    routes:
+      - name: storage-v1-all
+        strip_path: true
+        paths:
+          - /storage/v1/
+    plugins:
+      - name: cors
+
+  ## Edge Functions routes (sem key-auth)
+  - name: functions-v1
+    url: http://functions:9000/
+    routes:
+      - name: functions-v1-all
+        strip_path: true
+        paths:
+          - /functions/v1/
+    plugins:
+      - name: cors
+
+  ## Analytics
+  - name: analytics-v1
+    url: http://analytics:4000/
+    routes:
+      - name: analytics-v1-all
+        strip_path: true
+        paths:
+          - /analytics/v1/
+
+  ## Database meta
+  - name: meta
+    url: http://meta:8080/
+    routes:
+      - name: meta-all
+        strip_path: true
+        paths:
+          - /pg/
+    plugins:
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+          allow:
+            - admin
+
+  ## Studio / Dashboard
+  - name: dashboard
+    url: http://studio:3000/
+    routes:
+      - name: dashboard-all
+        strip_path: true
+        paths:
+          - /
+    plugins:
+      - name: cors
+      - name: basic-auth
+        config:
+          hide_credentials: true
+upstreams:
+  - name: supabase-auth-upstream
+    algorithm: round-robin
+    healthchecks:
+      active:
+        http_path: /health
+        timeout: 1               # tempo máximo para considerar falha de resposta
+        healthy:
+          interval: 2           # frequência do check quando saudável
+          successes: 1           # basta 1 resposta boa para marcar como healthy
+        unhealthy:
+          interval: 2           # frequência do check quando ruim
+          http_failures: 1       # se falhar 1 vez, tira do pool
+          tcp_failures: 1
+          timeouts: 1
+    targets:
+      - target: auth-2:9999
+        weight: 100
+      - target: supabase-auth-2:9999
+        weight: 100
+      - target: auth:9999
+        weight: 100
+      - target: supabase-auth:9999
+        weight: 100
+  - name: supabase-rest-upstream
+    algorithm: round-robin
+    healthchecks:
+      active:
+        http_path: /
+        timeout: 1               # tempo máximo para considerar falha de resposta
+        healthy:
+          interval: 2           # frequência do check quando saudável
+          successes: 1           # basta 1 resposta boa para marcar como healthy
+        unhealthy:
+          interval: 2           # frequência do check quando ruim
+          http_failures: 1       # se falhar 1 vez, tira do pool
+          tcp_failures: 1
+          timeouts: 1
+    targets:
+      - target: rest:3000
+        weight: 100
+      - target: rest-2:3000
+        weight: 100
+  - name: supabase-storage-upstream
+    algorithm: round-robin
+    healthchecks:
+      active:
+        http_path: /status
+        timeout: 1
+        healthy:
+          interval: 2
+          successes: 1
+        unhealthy:
+          interval: 2
+          http_failures: 1
+          tcp_failures: 1
+          timeouts: 1
+    targets:
+      - target: storage:5000
+        weight: 100

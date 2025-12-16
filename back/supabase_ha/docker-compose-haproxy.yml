@@ -1,0 +1,43 @@
+name: haproxy
+services:
+  haproxy-db:
+    image: haproxy:2.9
+    container_name: haproxy-db
+    ports:
+      - "6000:5000"  # host 6000 -> container 5000
+      - "6001:5001"  # host 6001 -> container 5001
+      - "8080:8080"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    command: ["haproxy", "-f", "/usr/local/etc/haproxy/haproxy.cfg", "-db"]
+    networks:
+      - supabase_default
+    depends_on:
+      - agent-primary
+      - agent-replica
+
+  agent-primary:
+    build:
+      context: ./role-agent
+      dockerfile: Dockerfile
+    container_name: pg-role-agent-primary
+    environment:
+      DSN: host=supabase-db port=5432 dbname=${POSTGRES_DB} user=supabase_admin password=${POSTGRES_PASSWORD}
+      PORT: 9100
+    networks:
+      - supabase_default
+
+  agent-replica:
+    build:
+      context: ./role-agent
+      dockerfile: Dockerfile
+    container_name: pg-role-agent-replica
+    environment:
+      DSN: host=supabase-db-replica port=5432 dbname=${POSTGRES_DB} user=supabase_admin password=${POSTGRES_PASSWORD}
+      PORT: 9101
+    networks:
+      - supabase_default
+
+networks:
+  supabase_default:
+    external: true

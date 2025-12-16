@@ -1,0 +1,46 @@
+name: bd_replica
+
+version: "3.9"
+
+services:
+  db-replica:
+    image: supabase/postgres:15.8.1.085
+    container_name: supabase-db-replica
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5556:5432"
+    volumes:
+      - ./volumes/db-replica:/var/lib/postgresql/data
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./volumes/db/pg_hba_custom.conf:/etc/postgresql-custom/pg_hba.conf:ro
+    entrypoint: ["/bin/sh","-c"]
+    command:
+      - >
+        chown -R postgres:postgres /var/lib/postgresql/data;
+        export PGPASSWORD=${POSTGRES_PASSWORD};
+        if pg_isready -h supabase-db -p 5432 -U supabase_admin >/dev/null 2>&1; then
+          if [ ! -f /var/lib/postgresql/data/standby.signal ]; then
+            rm -rf /var/lib/postgresql/data/*;
+            until su -s /bin/sh -c "PGSSLMODE=disable PGPASSWORD=${POSTGRES_PASSWORD} pg_basebackup -h supabase-db -p 5432 -U postgres -D /var/lib/postgresql/data -R -X stream -v" postgres; do
+              sleep 3;
+            done;
+          fi;
+        fi;
+        exec su -s /bin/sh -c "postgres \
+          -c config_file=/etc/postgresql/postgresql.conf \
+          -c wal_level=replica \
+          -c max_wal_senders=10 \
+          -c max_replication_slots=10 \
+          -c wal_keep_size=64MB \
+          -c log_min_messages=fatal \
+          -c hot_standby=on \
+          -c listen_addresses='*'" postgres
+    networks:
+      - supabase_default
+
+networks:
+  supabase_default:
+    external: true

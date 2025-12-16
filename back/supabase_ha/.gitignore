@@ -1,0 +1,18 @@
+# Volumes e artefatos de runtime (não versionar)
+volumes/db/
+volumes/db-replica/
+volumes/minio/
+volumes/storage/
+volumes/logs/
+
+# Sistema / IDE
+.DS_Store
+.idea/
+.env
+volumes/functions/env
+
+# Builds e temporários comuns
+**/*.log
+**/*.tmp
+**/*.swp
+**/*.lock

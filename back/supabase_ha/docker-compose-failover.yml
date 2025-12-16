@@ -1,0 +1,20 @@
+name: failover
+
+services:
+  pg-failover-watcher:
+    build:
+      context: ./failover-watcher
+      dockerfile: Dockerfile
+    container_name: pg-failover-watcher
+    restart: unless-stopped
+    networks:
+      - supabase_default
+    environment:
+      PRIMARY_DSN: host=supabase-db port=5432 dbname=${POSTGRES_DB} user=supabase_admin password=${POSTGRES_PASSWORD}
+      REPLICA_DSN: host=supabase-db-replica port=5432 dbname=${POSTGRES_DB} user=supabase_admin password=${POSTGRES_PASSWORD}
+      CHECK_INTERVAL: 5
+      FAILURE_THRESHOLD: 3
+
+networks:
+  supabase_default:
+    external: true
